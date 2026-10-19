@@ -348,7 +348,10 @@ func downloadOne(ctx context.Context, src Source, a Asset, dst string, progress 
 				f.Close()
 				return errors.New("下载的文件比清单里的大")
 			}
-			f.Write(buf[:n])
+			if _, werr := f.Write(buf[:n]); werr != nil { // 磁盘满等：不能让截断的文件通过校验
+				f.Close()
+				return werr
+			}
 			h.Write(buf[:n])
 			if progress != nil {
 				progress(done, a.Size)

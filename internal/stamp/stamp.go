@@ -21,6 +21,7 @@ const (
 	FromEXIF Source = "exif"
 	FromName Source = "filename"
 	Manual   Source = "manual" // 用户在桌面版里手动填写
+	FromMark Source = "mark"   // stampsort 以前写进照片的时间（导出时写入）
 	None     Source = "none"
 )
 
@@ -30,6 +31,7 @@ type Result struct {
 	HasClock bool
 	Source   Source
 	Raw      string // OCR 原文，便于排查
+	Orig     string // Source 为 mark 时，标记里记录的最初来源（ocr/manual/...）
 }
 
 // Hint 是水印"时间"那一行在画面里的相对位置（0~1）。同一个水印相机拍的照片，
@@ -106,6 +108,10 @@ func b2i(b bool) int {
 
 // Detect 识别一张已摆正的图。gray 是 imgx.Luma(img) 的结果，可传 nil。
 func (d *Detector) Detect(img *image.RGBA, gray []uint8, meta photo.Meta, name string) Result {
+	// stampsort 导出时写进去的时间（可能是核对、手动改过的）最可信，直接用，不再识别
+	if m := meta.Mark; m != nil {
+		return Result{Time: m.Time, HasClock: m.HasClock, Source: FromMark, Orig: m.Source, Raw: "照片里已标注的时间"}
+	}
 	var raw []string
 	if d.OCR != nil {
 		if gray == nil {

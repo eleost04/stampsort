@@ -27,6 +27,8 @@ type Settings struct {
 	DirFormat  string `json:"dirFormat"`  // 分类层级，见 organize.Dir*
 	NameFormat string `json:"nameFormat"` // 文件名，见 organize.Name*
 	PrintFlat  bool   `json:"printFlat"`  // 只做 6 寸时不按日期分目录
+	NoMark     bool   `json:"noMark"`     // 不把拍摄时间写进导出的照片
+	Report     bool   `json:"report"`     // 保存导出记录（CSV），默认不保存
 
 	// 6 寸
 	DPI     int `json:"dpi"`     // 0 = 300

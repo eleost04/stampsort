@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/eleost04/stampsort/internal/jpegenc"
+	"github.com/eleost04/stampsort/internal/photo"
 )
 
 // EncodeJPEG 按打印用参数编码：4:4:4 保住文字边缘，写入 DPI。
@@ -18,11 +19,23 @@ func EncodeJPEG(w io.Writer, im *image.RGBA, quality, dpi int) error {
 
 // SaveJPEG 编码并写文件。
 func SaveJPEG(path string, im *image.RGBA, quality, dpi int) error {
+	return SaveJPEGMark(path, im, quality, dpi, nil)
+}
+
+// SaveJPEGMark 编码并写文件；mark 不为 nil 时同时写入拍摄时间（EXIF + stampsort 标记）。
+func SaveJPEGMark(path string, im *image.RGBA, quality, dpi int, mark *photo.Mark) error {
 	var buf bytes.Buffer
 	if err := EncodeJPEG(&buf, im, quality, dpi); err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	data := buf.Bytes()
+	if mark != nil {
+		var err error
+		if data, err = photo.WithMark(data, *mark); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // PDFPage 是 PDF 的一页：一张已编码的 JPEG 文件。

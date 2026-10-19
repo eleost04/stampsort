@@ -83,6 +83,7 @@ type Session struct {
 
 	batchStart time.Time // 这一批开始识别的时间，用来算速度
 	batchDone  int
+	previewGen int // 排版参数每改一次加一，旧参数算出的预览不再缓存
 }
 
 // gate 是可以随时调整上限的并发闸门：设置里改"同时识别张数"立即生效。
@@ -141,7 +142,19 @@ func NewSession(det *stamp.Detector, tmp string, notify func()) *Session {
 	for range maxWorkers {
 		go s.worker()
 	}
+	go s.heartbeat()
 	return s
+}
+
+// heartbeat 定时刷新临时目录的修改时间，表明它还在用：别的实例启动时只清理一天没刷新过的。
+func (s *Session) heartbeat() {
+	for {
+		now := time.Now()
+		if os.Chtimes(s.tmp, now, now) != nil {
+			return // 目录已删（会话结束）
+		}
+		time.Sleep(30 * time.Minute)
+	}
 }
 
 // SetWorkers 调整同时识别的张数（0 = CPU 核数）。
@@ -271,7 +284,7 @@ func (s *Session) retryLocked() {
 	}
 	var again []*Item
 	for _, it := range s.items {
-		if it.Status != "ready" || it.manual != nil || it.retried || it.detected.Source == stamp.FromOCR {
+		if it.Status != "ready" || it.manual != nil || it.retried || it.detected.Source == stamp.FromOCR || it.detected.Source == stamp.FromMark {
 			continue
 		}
 		if _, ok := s.det.HintFor(it.H > it.W); !ok {
@@ -394,7 +407,7 @@ func (s *Session) Preview(id int, layout print6.Options) ([]byte, error) {
 		s.mu.Unlock()
 		return p, nil
 	}
-	path := it.path
+	path, gen := it.path, s.previewGen
 	s.mu.Unlock()
 
 	img, _, err := photo.Load(path)
@@ -408,7 +421,7 @@ func (s *Session) Preview(id int, layout print6.Options) ([]byte, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.byID[id] != nil {
+	if s.byID[id] != nil && gen == s.previewGen { // 计算期间改了排版参数就不缓存
 		it.preview = buf.Bytes()
 		s.cached = append(s.cached, it)
 		if len(s.cached) > maxPreviews {
@@ -426,6 +439,7 @@ func (s *Session) DropPreviews() {
 		it.preview = nil
 	}
 	s.cached = nil
+	s.previewGen++
 	s.mu.Unlock()
 }
 

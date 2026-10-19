@@ -29,10 +29,11 @@ func IsImage(name string) bool {
 	return false
 }
 
-// Meta 是从 EXIF 读到的信息。
+// Meta 是从 EXIF / XMP 读到的信息。
 type Meta struct {
 	Taken       time.Time // 零值表示没有
 	Orientation int
+	Mark        *Mark // stampsort 以前写进去的拍摄时间（有就不用再识别）
 }
 
 // Load 读图并按 EXIF 方向摆正（等价于 ImageOps.exif_transpose）。
@@ -49,8 +50,8 @@ func Load(path string) (*image.RGBA, Meta, error) {
 	return imgx.Orient(imgx.ToRGBA(img), meta.Orientation), meta, nil
 }
 
-// ParseExif 从 JPEG 的 APP1 段读取 DateTimeOriginal（没有则用 DateTime）和 Orientation。
-// 不是 JPEG 或没有 EXIF 时返回零值。
+// ParseExif 从 JPEG 的 APP1 段读取 DateTimeOriginal（没有则用 DateTime）、Orientation，
+// 以及 stampsort 写的 XMP 标记。不是 JPEG 或没有这些信息时返回零值。
 func ParseExif(data []byte) Meta {
 	var m Meta
 	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
@@ -76,7 +77,11 @@ func ParseExif(data []byte) Meta {
 		seg := data[i+4 : end]
 		if marker == 0xE1 && bytes.HasPrefix(seg, []byte("Exif\x00\x00")) {
 			parseTIFF(seg[6:], &m)
-			return m
+		}
+		if marker == 0xE1 && bytes.HasPrefix(seg, []byte(xmpHeader)) && m.Mark == nil {
+			if mk, ok := parseMark(seg); ok {
+				m.Mark = &mk
+			}
 		}
 		i = end
 	}

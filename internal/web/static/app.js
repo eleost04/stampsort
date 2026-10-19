@@ -142,7 +142,7 @@ $("again").onclick = back;
 
 // ---------------------------------------------------------------- 进度
 const STAGE = { queued: "排队中…", running: "处理中…", done: "处理完成", error: "出错了", cancelled: "已取消" };
-const SRC = { ocr: "水印", exif: "EXIF", filename: "文件名", none: "未识别" };
+const SRC = { ocr: "水印", exif: "EXIF", filename: "文件名", mark: "已标注", none: "未识别" };
 
 async function poll() {
   clearTimeout(pollTimer);

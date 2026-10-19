@@ -107,14 +107,14 @@ input[type=password] { font: inherit; width: 100%; padding: 10px 12px; border: 1
         </span></div>
       <div class="row" id="layoutRow"><span class="label">6 寸排版</span>
         <span class="seg">
-          <label><input type="radio" name="layout" value="c" checked>方案 C</label>
+          <label><input type="radio" name="layout" value="c" checked>保留画面</label>
           <label><input type="radio" name="layout" value="crop">纯裁切</label>
         </span></div>
       <div class="row" id="extraRow"><span class="label">附加</span>
         <label class="check"><input type="checkbox" id="pdf" checked>合成 PDF</label>
         <label class="check"><input type="checkbox" id="bleed">出血版 2.5%</label>
       </div>
-      <div class="sub" style="color:var(--muted);font-size:12px">方案 C：顶部少裁一点，水印不变形，主体轻微竖向压缩；纯裁切：不变形，只从顶部裁到 3:2。</div>
+      <div class="sub" style="color:var(--muted);font-size:12px">保留画面：顶部少裁一点，水印不变形，主体轻微竖向压缩；纯裁切：完全不变形，只从顶部裁到 3:2。</div>
     </div>
     <button id="start" class="primary go" type="button" disabled>开始处理</button>
     <div id="ocrWarn" class="msg hidden">服务器没有加载 OCR，只能按 EXIF / 文件名识别时间。</div>

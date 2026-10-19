@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -51,8 +52,11 @@ type Options struct {
 	DirFormat, NameFormat string
 	// PrintByDate：只做 6 寸时也按日期分目录、按时间命名（需要识别时间）。
 	PrintByDate bool
-	// ReportName 是报告的相对路径，默认 report.csv。
+	// ReportName 是报告的相对路径，默认 report.csv；NoReport 时不写报告。
 	ReportName string
+	NoReport   bool
+	// Mark：把时间写进导出的 JPEG（EXIF 拍摄日期 + stampsort 标记），以后再加入时不用重新识别。
+	Mark bool
 }
 
 // Result 是一张图的处理结果。路径都是相对 OutDir 的斜杠路径。
@@ -176,12 +180,14 @@ feed:
 			return sum, err
 		}
 	}
-	sum.Report = Report
-	if o.ReportName != "" {
-		sum.Report = o.ReportName
-	}
-	if err := writeReport(filepath.Join(o.OutDir, filepath.FromSlash(sum.Report)), results); err != nil {
-		return sum, err
+	if !o.NoReport {
+		sum.Report = Report
+		if o.ReportName != "" {
+			sum.Report = o.ReportName
+		}
+		if err := writeReport(filepath.Join(o.OutDir, filepath.FromSlash(sum.Report)), results); err != nil {
+			return sum, err
+		}
 	}
 	sum.Elapsed = time.Since(start)
 	return sum, ctx.Err()
@@ -243,6 +249,15 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 		}
 	}
 
+	// 要写入时间标记时，分类后的文件内容 = 原图 + 标记；去重也要按写入后的内容比较。
+	// 读文件、写标记放在下面的按序命名之前做，不占用串行区。
+	var marked []byte
+	if r.o.Sort && r.o.Mark && res.Stamp.Source != stamp.None {
+		if src, err := os.ReadFile(it.Path); err == nil {
+			marked, _ = photo.WithMark(src, markOf(res.Stamp)) // 不是 JPEG 时为 nil，按原样复制
+		}
+	}
+
 	// 按输入顺序分配名字
 	if !r.turn.wait(i) {
 		res.Err = "已取消"
@@ -255,7 +270,11 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 	}
 	if r.o.Sort {
 		dir, stem := organize.DateDir(res.Stamp, r.o.DirFormat), organize.Stem(res.Stamp, it.Name, r.o.NameFormat)
-		sortedRel, res.Existed = r.sorted.Reserve(dir, stem, ext, func(p string) bool { return organize.SameFile(it.Path, p) })
+		same := func(p string) bool { return organize.SameFile(it.Path, p) }
+		if marked != nil {
+			same = func(p string) bool { return organize.SameContent(marked, p) || isSamePath(it.Path, p) }
+		}
+		sortedRel, res.Existed = r.sorted.Reserve(dir, stem, ext, same)
 		printDir = dir
 		printStem = strings.TrimSuffix(path.Base(sortedRel), path.Ext(sortedRel))
 	} else if r.o.PrintByDate {
@@ -276,11 +295,20 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 	if r.o.Sort {
 		res.Sorted = path.Join(r.sortedRoot(), sortedRel)
 		if !res.Existed {
-			if err := organize.Place(it.Path, filepath.Join(r.o.OutDir, filepath.FromSlash(res.Sorted)), r.o.Move); err != nil {
+			dst := filepath.Join(r.o.OutDir, filepath.FromSlash(res.Sorted))
+			var err error
+			if marked != nil {
+				err = organize.PlaceData(it.Path, dst, marked, r.o.Move)
+			} else {
+				err = organize.Place(it.Path, dst, r.o.Move)
+			}
+			if err != nil {
 				res.Err = "分类失败: " + err.Error()
 				return
 			}
-		} else if r.o.Move {
+		} else if r.o.Move && !isSamePath(it.Path, filepath.Join(r.o.OutDir, filepath.FromSlash(res.Sorted))) {
+			// 目标位置已有同内容文件，移动 = 删掉源文件。但源文件本身就在目标位置时
+			// （对已整理好的目录再整理一次）绝不能删，否则唯一的一份就没了。
 			os.Remove(it.Path)
 		}
 		if res.Stamp.Source == stamp.None {
@@ -294,6 +322,24 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 		}
 	}
 	return
+}
+
+var rePrintPDF = regexp.MustCompile(`^待打印_(横|竖)版(_\d+)?\.pdf$`)
+
+// isSamePath 判断两个路径是否指向同一个文件（考虑大小写、相对路径、链接）。
+func isSamePath(a, b string) bool {
+	sa, err1 := os.Stat(a)
+	sb, err2 := os.Stat(b)
+	return err1 == nil && err2 == nil && os.SameFile(sa, sb)
+}
+
+// markOf 把识别结果转成要写进照片的标记。时间本来就来自标记时，沿用标记里记录的最初来源。
+func markOf(r stamp.Result) photo.Mark {
+	src := string(r.Source)
+	if r.Source == stamp.FromMark && r.Orig != "" {
+		src = r.Orig
+	}
+	return photo.Mark{Time: r.Time, HasClock: r.HasClock, Source: src}
 }
 
 func (r *runner) preset(i int) *stamp.Result {
@@ -316,6 +362,11 @@ func (r *runner) print(img *image.RGBA, gray []uint8, res *Result, dir, rel stri
 		res.Warnings = append(res.Warnings, fmt.Sprintf("原图比 3:2 还扁，左右裁掉 %dpx", info.CutX))
 	}
 	dpi, q := r.o.Layout.DPI, r.o.Quality
+	var mark *photo.Mark
+	if r.o.Mark && res.Stamp.Source != stamp.None && res.Stamp.Source != "" {
+		m := markOf(res.Stamp)
+		mark = &m
+	}
 	var jpgPath string
 	if rel != "" {
 		res.Print = path.Join(r.printRoot(), rel)
@@ -323,13 +374,13 @@ func (r *runner) print(img *image.RGBA, gray []uint8, res *Result, dir, rel stri
 		if err := os.MkdirAll(filepath.Dir(jpgPath), 0o755); err != nil {
 			return err
 		}
-		if err := print6.SaveJPEG(jpgPath, out, q, dpi); err != nil {
+		if err := print6.SaveJPEGMark(jpgPath, out, q, dpi, mark); err != nil {
 			return err
 		}
 	}
 	if r.o.Bleed > 0 && rel != "" {
 		bp := strings.TrimSuffix(jpgPath, ".jpg") + fmt.Sprintf("_出血%g%%.jpg", r.o.Bleed)
-		if err := print6.SaveJPEG(bp, print6.AddBleed(out, r.o.Bleed, 25), q, dpi); err != nil {
+		if err := print6.SaveJPEGMark(bp, print6.AddBleed(out, r.o.Bleed, 25), q, dpi, mark); err != nil {
 			return err
 		}
 	}
@@ -414,7 +465,7 @@ func (r *runner) collectDirPages() error {
 			if e.IsDir() {
 				continue
 			}
-			if strings.HasPrefix(name, "待打印_") && strings.HasSuffix(name, ".pdf") {
+			if rePrintPDF.MatchString(name) { // 只删本程序生成的（待打印_横版.pdf、待打印_竖版_2.pdf 这种）
 				os.Remove(filepath.Join(abs, name))
 				continue
 			}

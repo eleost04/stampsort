@@ -12,8 +12,9 @@ var (
 	reNameFull = regexp.MustCompile(`(?:^|\D)((?:19|20)\d{2})[-_.]?(\d{2})[-_.]?(\d{2})[-_. T]?(\d{2})[-_.:]?(\d{2})(?:[-_.:]?(\d{2}))?(?:\D|$)`)
 	// IMG-20260813-WA0001、2026-08-13
 	reNameDate = regexp.MustCompile(`(?:^|\D)((?:19|20)\d{2})[-_.]?(\d{2})[-_.]?(\d{2})(?:\D|$)`)
-	// mmexport1692000000000、wx_camera_1692000000000（毫秒时间戳）
-	reNameMillis = regexp.MustCompile(`(?:^|\D)(1\d{12})(?:\D|$)`)
+	// mmexport1692000000000、wx_camera_1692000000000（毫秒时间戳）。只认这些已知前缀，
+	// 否则相机序号之类的 13 位数字会被误当成时间
+	reNameMillis = regexp.MustCompile(`(?i)(?:mmexport|wx_camera_|microMsg\.|weixin_|wechat_?)(1\d{12})(?:\D|$)`)
 )
 
 // FromFilename 从文件名里找拍摄时间。

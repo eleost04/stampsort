@@ -1,6 +1,7 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"image"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/eleost04/stampsort/internal/input"
+	"github.com/eleost04/stampsort/internal/photo"
 	"github.com/eleost04/stampsort/internal/print6"
 	"github.com/eleost04/stampsort/internal/stamp"
 )
@@ -215,5 +217,72 @@ func TestPrintByDate(t *testing.T) {
 	}
 	if sum.Results[0].Print != "10/19/2026-10-19_08-21_6寸.jpg" {
 		t.Errorf("得到 %s", sum.Results[0].Print)
+	}
+}
+
+// 写入时间标记：分类后的照片带 EXIF 拍摄日期和 stampsort 标记；再次加入时直接读标记（不识别），
+// 再导出到同一个文件夹不会多出 _2 副本；NoReport 时不写报告。
+func TestMarkRoundTrip(t *testing.T) {
+	src := t.TempDir()
+	p := writePhoto(t, src, "DSC0001.jpg", 400, 300) // 文件名里没有时间
+	manual := stamp.Result{Time: time.Date(2026, 10, 19, 8, 21, 0, 0, time.Local), HasClock: true, Source: stamp.Manual}
+	out := t.TempDir()
+	o := Options{Sort: true, OutDir: out, Mark: true, NoReport: true, Preset: []*stamp.Result{&manual}}
+	if _, err := Run(context.Background(), []input.Item{{Path: p, Name: "DSC0001.jpg"}}, nil, o, nil); err != nil {
+		t.Fatal(err)
+	}
+	sorted := filepath.Join(out, "2026", "10", "19", "2026-10-19_08-21.jpg")
+	data, err := os.ReadFile(sorted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := photo.ParseExif(data)
+	if meta.Mark == nil || meta.Mark.Source != "manual" || !meta.Taken.Equal(manual.Time) {
+		t.Fatalf("没写入标记: %+v", meta)
+	}
+	if _, err := os.Stat(filepath.Join(out, Report)); err == nil {
+		t.Error("NoReport 时不该有 report.csv")
+	}
+	orig, _ := os.ReadFile(p)
+	if bytes.Contains(orig, []byte("stampsort")) {
+		t.Error("原图被改了")
+	}
+
+	// 拿分类好的照片只做 6 寸：不给预设、不用 OCR，也能按标记的时间分目录命名
+	out2 := t.TempDir()
+	o2 := Options{Print: true, PrintByDate: true, OutDir: out2, Layout: print6.DefaultOptions(), NoReport: true, Mark: true}
+	o2.Layout.DPI = 50
+	sum, err := Run(context.Background(), []input.Item{{Path: sorted, Name: "2026-10-19_08-21.jpg"}}, nil, o2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := sum.Results[0]; r.Stamp.Source != stamp.FromMark || r.Print != "2026/10/19/2026-10-19_08-21_6寸.jpg" {
+		t.Errorf("应直接用标记: %+v", r)
+	}
+
+	// 原图再导出一次到同一个文件夹：写入标记后的内容相同，不产生 _2
+	sum, _ = Run(context.Background(), []input.Item{{Path: p, Name: "DSC0001.jpg"}}, nil, o, nil)
+	if !sum.Results[0].Existed {
+		t.Errorf("应识别为已存在: %+v", sum.Results[0])
+	}
+}
+
+// 审计发现的问题：对已整理好的目录用 --move 再整理到同一个位置，源文件就是目标文件，不能被删掉。
+func TestMoveInPlaceKeepsFile(t *testing.T) {
+	out := t.TempDir()
+	day := filepath.Join(out, "2026", "08", "13")
+	os.MkdirAll(day, 0o755)
+	p := writePhoto(t, day, "IMG_20260813_062001.jpg", 400, 300)
+	// 文件名就是目标名
+	target := filepath.Join(day, "2026-08-13_06-20.jpg")
+	os.Rename(p, target)
+	for _, mark := range []bool{false, true} {
+		o := Options{Sort: true, Move: true, OutDir: out, Mark: mark, NoReport: true}
+		if _, err := Run(context.Background(), []input.Item{{Path: target, Name: "IMG_20260813_062001.jpg"}}, nil, o, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(target); err != nil {
+			t.Fatalf("mark=%v: 源文件（也是目标文件）被删了", mark)
+		}
 	}
 }

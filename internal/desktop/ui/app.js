@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const show = (el, on = true) => el.classList.toggle("hidden", !on);
 const ICON = (name, cls = "ic") => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
-const SRC = { ocr: "水印", exif: "EXIF", filename: "文件名", manual: "手动", none: "未识别" };
+const SRC = { ocr: "水印", exif: "EXIF", filename: "文件名", manual: "手动", mark: "已标注", none: "未识别" };
 const WEEK = "日一二三四五六";
 
 let state = { items: [], pending: 0, settings: {}, export: null, native: false, ocr: true };
@@ -56,7 +56,8 @@ function connect() {
 
 // ------------------------------------------------------------------ 渲染
 
-function isCheck(it) { return it.status === "ready" && it.source !== "ocr" && it.source !== "manual"; }
+// 水印识别、手动填写、以前导出时写进照片的时间都可信，其余（EXIF、文件名、未识别）需要核对
+function isCheck(it) { return it.status === "ready" && !["ocr", "manual", "mark"].includes(it.source); }
 function isBad(it) { return it.status === "error" || (it.status === "ready" && it.source === "none"); }
 
 function dateLabel(t) {
@@ -564,7 +565,7 @@ function showViewerItem() {
   $("vDate").value = it.time ? it.time.slice(0, 10) : "";
   $("vClock").value = it.time && it.clock ? it.time.slice(11, 16) : "";
   show($("vReset"), it.source === "manual");
-  show($("vRedetect"), state.ocr && it.status === "ready" && it.source !== "manual" && it.source !== "ocr");
+  show($("vRedetect"), state.ocr && it.status === "ready" && !["manual", "ocr", "mark"].includes(it.source));
   $("vForm").querySelectorAll("input, button[type=submit]").forEach((el) => (el.disabled = it.status !== "ready"));
   if (it.status === "ready" && !viewer.contains(document.activeElement)) $("vDate").focus();
 }
@@ -573,7 +574,12 @@ function loadViewerImage(it) {
   const img = $("vImg"), wrap = $("vImgWrap");
   wrap.classList.toggle("print", vKind === "print");
   show($("vPaper"), vKind === "print");
-  if (it.status !== "ready") { img.removeAttribute("src"); show($("vSpin"), it.status === "pending"); return; }
+  if (it.status !== "ready") {
+    img.removeAttribute("src");
+    delete img.dataset.url; // 否则切回同一张时以为已加载，图片一直空白
+    show($("vSpin"), it.status === "pending");
+    return;
+  }
   const url = `/api/preview/${it.id}?kind=${vKind}` + (vKind === "print" ? `&l=${state.settings.layout}` : "");
   if (img.dataset.url === url) return;
   img.dataset.url = url;

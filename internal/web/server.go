@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"log"
 	"mime"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -99,8 +100,7 @@ func New(cfg Config) (*Server, error) {
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, "jobs"), 0o755); err != nil {
 		return nil, err
 	}
-	sum := sha256.Sum256([]byte("stampsort-session\x00" + cfg.Password))
-	s := &Server{cfg: cfg, key: sum[:], mux: http.NewServeMux(), queue: make(chan *Job, 64), jobs: map[string]*Job{}}
+	s := &Server{cfg: cfg, key: sessionKey(cfg.DataDir, cfg.Password), mux: http.NewServeMux(), queue: make(chan *Job, 64), jobs: map[string]*Job{}}
 
 	static, _ := fs.Sub(staticFS, "static")
 	files := http.FileServerFS(static)
@@ -118,7 +118,41 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
+// sessionKey 返回签 cookie 的密钥：数据目录里一个随机密钥（重启后登录仍有效）与密码做 HMAC。
+// 不直接用密码派生，cookie 泄露时就没法拿来离线猜密码；改了密码，旧 cookie 全部失效。
+func sessionKey(dataDir, password string) []byte {
+	p := filepath.Join(dataDir, "session.key")
+	key, err := os.ReadFile(p)
+	if err != nil || len(key) != 32 {
+		key = make([]byte, 32)
+		rand.Read(key)
+		os.WriteFile(p, key, 0o600)
+	}
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte(password))
+	return m.Sum(nil)
+}
+
+// isLoopbackHost 判断 Host 头是否是本机地址。
+func isLoopbackHost(host string) bool {
+	h := host
+	if hh, _, err := net.SplitHostPort(host); err == nil {
+		h = hh
+	}
+	h = strings.Trim(h, "[]")
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 不设密码时只能在本机用：校验 Host，防止恶意网页用 DNS rebinding 访问本机服务
+	if s.cfg.Password == "" && !isLoopbackHost(r.Host) {
+		http.Error(w, "forbidden host", http.StatusForbidden)
+		return
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Frame-Options", "DENY")
@@ -230,7 +264,7 @@ func (s *Server) createJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, code, map[string]string{"error": msg})
 	}
 
-	o := job.Options{Sort: true, Print: true, PDF: true, Layout: print6.DefaultOptions(), OutDir: filepath.Join(dir, "out")}
+	o := job.Options{Sort: true, Print: true, PDF: true, Layout: print6.DefaultOptions(), OutDir: filepath.Join(dir, "out"), Mark: true}
 	var srcs []string
 	for {
 		part, err := mr.NextPart()

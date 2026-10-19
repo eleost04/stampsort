@@ -629,6 +629,10 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------------ 导出
 
 func (s *Server) startExport(w http.ResponseWriter, r *http.Request) {
+	if u := s.updateSnapshot(); u.Downloading || u.Installing {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "正在更新程序，更新完成后再导出"})
+		return
+	}
 	s.expMu.Lock()
 	if s.export != nil && s.export.Running {
 		s.expMu.Unlock()
@@ -654,7 +658,8 @@ func (s *Server) startExport(w http.ResponseWriter, r *http.Request) {
 	lo.DPI = st.DPI
 	o := job.Options{Sort: st.Mode != "print", Print: st.Mode != "sort", OutDir: out, Layout: lo,
 		PDF: st.PDF, Bleed: st.Bleed, Quality: st.Quality, Preset: presets, Workers: Workers(st.Workers),
-		DirFormat: st.DirFormat, NameFormat: st.NameFormat, PrintByDate: !st.PrintFlat, ReportName: report}
+		DirFormat: st.DirFormat, NameFormat: st.NameFormat, PrintByDate: !st.PrintFlat, ReportName: report,
+		NoReport: !st.Report, Mark: !st.NoMark}
 	ctx, cancel := context.WithCancel(context.Background())
 	exp := &exportState{Running: true, Total: len(items), OutDir: out, Skipped: skipped, cancel: cancel}
 	s.export = exp

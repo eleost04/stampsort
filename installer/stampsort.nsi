@@ -82,6 +82,10 @@ Function ${un}WaitForApp
     IntOp $R0 $R0 + 1
     ${If} ${Silent}
       ${If} $R0 > 60
+        ; 自动更新时旧版迟迟不退出：放弃这次更新，把旧版重新打开，别让用户的窗口凭空消失
+        ${If} $Relaunch == 1
+          Exec '"$INSTDIR\stampsort.exe"'
+        ${EndIf}
         Abort
       ${EndIf}
       Sleep 500

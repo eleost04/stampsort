@@ -234,8 +234,20 @@ func TestAddReviewExport(t *testing.T) {
 			t.Errorf("缺少 %s", want)
 		}
 	}
+	if m, _ := filepath.Glob(filepath.Join(x.OutDir, "导出记录", "*.csv")); len(m) != 0 {
+		t.Errorf("默认不保存导出记录: %v", m)
+	}
+	// 打开"保存导出记录"后再导出一次：有一份记录，且照片不会重复复制
+	req, _ = http.NewRequest("PUT", e.ts.URL+"/api/settings", strings.NewReader(`{"report":true}`))
+	e.c.Do(req)
+	time.Sleep(1100 * time.Millisecond) // 记录文件名精确到秒
+	e.post("/api/export", map[string]any{})
+	st = e.waitIdle()
 	if m, _ := filepath.Glob(filepath.Join(x.OutDir, "导出记录", "*.csv")); len(m) != 1 {
 		t.Errorf("导出记录应有 1 份: %v", m)
+	}
+	if m, _ := filepath.Glob(filepath.Join(x.OutDir, "分类", "2026", "08", "13", "*")); len(m) != 1 {
+		t.Errorf("重复导出不应产生副本: %v", m)
 	}
 	// 原图不能被移动
 	if _, err := os.Stat(b); err != nil {

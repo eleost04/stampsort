@@ -121,6 +121,41 @@ func SameFile(a, b string) bool {
 	return err1 == nil && err2 == nil && bytes.Equal(da, db)
 }
 
+// SameContent 判断磁盘上的文件内容是否等于 data。
+func SameContent(data []byte, p string) bool {
+	st, err := os.Stat(p)
+	if err != nil || st.Size() != int64(len(data)) {
+		return false
+	}
+	b, err := os.ReadFile(p)
+	return err == nil && bytes.Equal(b, data)
+}
+
+// PlaceData 把 data（原图加上时间标记后的内容）写到 dst，保留 src 的修改时间；move 时删除 src。
+func PlaceData(src, dst string, data []byte, move bool) error {
+	st, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp := dst + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	os.Chtimes(dst, st.ModTime(), st.ModTime())
+	if move {
+		return os.Remove(src)
+	}
+	return nil
+}
+
 // Place 把 src 复制（move=true 时移动）到 dst，保留修改时间。
 func Place(src, dst string, move bool) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {

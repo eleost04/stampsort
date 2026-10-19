@@ -58,6 +58,7 @@ func TestFromFilename(t *testing.T) {
 		{"微信图片_2026-08-13_062013_123.jpg", "2026-08-13 06:20:13", true, true},
 		{"wx_camera_1786600000000.jpg", time.UnixMilli(1786600000000).Format("2006-01-02 15:04:05"), true, true},
 		{"DSC01234.JPG", "", false, false},
+		{"P1234567890123.jpg", "", false, false}, // 13 位数字但不是微信导出的
 		{"20261340.jpg", "", false, false},
 	} {
 		tm, clock, ok := FromFilename(tc.name)

@@ -140,7 +140,7 @@ button.pill:hover { filter: brightness(.96); }
 .card .time { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .card .name { grid-column: 1 / -1; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .src { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--surface-3); color: var(--text-2); white-space: nowrap; }
-.src.ocr { background: var(--success-soft); color: var(--success); }
+.src.ocr, .src.mark { background: var(--success-soft); color: var(--success); }
 .src.exif, .src.filename { background: var(--warning-soft); color: var(--warning); }
 .src.manual { background: var(--accent-soft); color: var(--accent); }
 .src.none, .src.error { background: var(--danger-soft); color: var(--danger); }

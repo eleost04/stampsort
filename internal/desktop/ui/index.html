@@ -104,7 +104,7 @@
       <div class="field" data-for-print>
         <label>6 寸排版</label>
         <div class="seg" id="layout">
-          <label><input type="radio" name="layout" value="c">方案 C</label>
+          <label><input type="radio" name="layout" value="c">保留画面</label>
           <label><input type="radio" name="layout" value="crop">纯裁切</label>
         </div>
         <p class="hint" id="layoutHint"></p>
@@ -224,6 +224,8 @@
           <option value="orig">保留原文件名</option>
         </select></div>
       <div class="set-row"><span></span><label class="switch"><input type="checkbox" data-inv="printFlat"><span class="track"></span>只做 6 寸时也按日期分文件夹</label></div>
+      <div class="set-row"><span></span><label class="switch"><input type="checkbox" data-inv="noMark"><span class="track"></span>把拍摄时间写进导出的照片<small>写入 EXIF「拍摄日期」，以后再拖进来（比如拿分类好的照片只做 6 寸）不用重新识别，手动改过的时间也会保留</small></label></div>
+      <div class="set-row"><span></span><label class="switch"><input type="checkbox" data-bool="report"><span class="track"></span>保存导出记录<small>每次导出在保存位置的「导出记录」里留一份 CSV 清单（原文件、识别时间、来源）</small></label></div>
       <div class="example big" id="example2"></div>
     </section>
     <section>

@@ -148,3 +148,26 @@ func TestSafeName(t *testing.T) {
 		}
 	}
 }
+
+// 不设密码时只接受本机 Host（防 DNS rebinding）；设了密码时由登录保护。
+func TestLoopbackHostCheck(t *testing.T) {
+	srv, _ := New(Config{DataDir: t.TempDir(), Detector: &stamp.Detector{}})
+	for host, want := range map[string]int{"127.0.0.1:8930": 200, "localhost:8930": 200, "[::1]:8930": 200, "evil.example:8930": 403} {
+		req := httptest.NewRequest("GET", "/api/me", nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("Host %s: %d，期望 %d", host, rec.Code, want)
+		}
+	}
+}
+
+// 会话密钥持久化：同一数据目录、同一密码得到同一个密钥；换密码后不同。
+func TestSessionKey(t *testing.T) {
+	dir := t.TempDir()
+	a, b, c := sessionKey(dir, "pw"), sessionKey(dir, "pw"), sessionKey(dir, "pw2")
+	if !bytes.Equal(a, b) || bytes.Equal(a, c) {
+		t.Error("会话密钥不对")
+	}
+}

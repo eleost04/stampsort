@@ -50,7 +50,15 @@ func Collect(srcs []string, tmpDir string, lim Limits) (items []Item, warns []st
 		case st.IsDir():
 			err := filepath.WalkDir(s, func(p string, d os.DirEntry, err error) error {
 				if err != nil {
-					return err
+					if p == s {
+						return err
+					}
+					// 子目录没权限（$RECYCLE.BIN、System Volume Information 等）：跳过，别让整个文件夹加不进来
+					warns = append(warns, fmt.Sprintf("跳过 %s: %v", p, err))
+					if d != nil && d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
 				}
 				if d.IsDir() {
 					if p != s && strings.HasPrefix(d.Name(), ".") {

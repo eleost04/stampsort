@@ -181,16 +181,18 @@ func runBatch(cmd string, args []string) error {
 	out := fs.String("o", "", "输出目录（默认在第一个输入旁边建 <名字>_整理 / _分类 / _6寸）")
 	move := fs.Bool("move", false, "分类时移动原图（默认复制，原图不动）")
 	noOCR := fs.Bool("no-ocr", false, "不识别水印，只用 EXIF / 文件名")
-	mode := fs.String("mode", "c", "6 寸排版：c=方案C（裁一点顶+主体轻压缩，水印不变形）crop=纯裁切")
+	mode := fs.String("mode", "c", "6 寸排版：c=保留画面（裁一点顶+主体轻压缩，水印不变形）crop=纯裁切（不变形）")
 	dpi := fs.Int("dpi", print6.DPI, "输出分辨率")
-	cropRatio := fs.Float64("crop-ratio", 0.5, "方案C：多余高度里靠裁顶消化的比例，0=全靠压缩 1=全靠裁切")
-	cropTop := fs.Int("crop-top", -1, "方案C：直接指定顶部裁切像素，覆盖 --crop-ratio")
+	cropRatio := fs.Float64("crop-ratio", 0.5, "保留画面：多余高度里靠裁顶消化的比例，0=全靠压缩 1=全靠裁切")
+	cropTop := fs.Int("crop-top", -1, "保留画面：直接指定顶部裁切像素，覆盖 --crop-ratio")
 	pdf := fs.Bool("pdf", cmd == "all", "合成多页 PDF，一次打印一批（all 默认开启）")
 	bleed := fs.Float64("bleed", 0, "额外生成出血版，向外扩百分比（无边距打印建议 2.5）")
 	chunk := fs.Int("chunk", 30, "每个 PDF 最多几页")
 	quality := fs.Int("quality", 95, "JPEG 质量")
 	noJPG := fs.Bool("no-jpg", false, "只要 PDF，不留单张 6 寸 JPEG")
 	workers := fs.Int("j", 0, "并行数（默认 CPU 核数）")
+	noMark := fs.Bool("no-mark", false, "不把拍摄时间写进导出的照片（默认写入 EXIF 拍摄日期 + stampsort 标记）")
+	noReport := fs.Bool("no-report", false, "不写 report.csv")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "用法: stampsort %s 照片/目录/zip... [参数]\n\n", cmd)
 		fs.PrintDefaults()
@@ -214,6 +216,7 @@ func runBatch(cmd string, args []string) error {
 		Sort: cmd != "print", Print: cmd != "sort", Move: *move,
 		Layout: print6.Options{Mode: print6.Mode(*mode), DPI: *dpi, CropRatio: *cropRatio, CropTop: *cropTop},
 		PDF:    *pdf, Bleed: *bleed, Chunk: *chunk, Quality: *quality, NoJPG: *noJPG, Workers: *workers,
+		Mark: !*noMark, NoReport: *noReport,
 	}
 	if o.NoJPG {
 		o.PDF = true
@@ -284,7 +287,7 @@ func printResult(w io.Writer, done, total int, r job.Result, o job.Options) {
 				t = r.Stamp.Time.Format("2006-01-02") + "      "
 			}
 		}
-		line += fmt.Sprintf("  %s (%s)", t, map[stamp.Source]string{stamp.FromOCR: "水印", stamp.FromEXIF: "EXIF", stamp.FromName: "文件名", stamp.None: "-"}[r.Stamp.Source])
+		line += fmt.Sprintf("  %s (%s)", t, map[stamp.Source]string{stamp.FromOCR: "水印", stamp.FromEXIF: "EXIF", stamp.FromName: "文件名", stamp.FromMark: "已标注", stamp.None: "-"}[r.Stamp.Source])
 	}
 	if o.Print && r.Layout.Out.X > 0 {
 		line += fmt.Sprintf("  裁顶%4dpx 压缩%4.1f%%", r.Layout.CropTop, r.Layout.Squash*100)
@@ -325,7 +328,10 @@ func printSummary(sum *job.Summary, o job.Options, abs string) {
 	if failed > 0 {
 		fmt.Printf("，%d 张失败", failed)
 	}
-	fmt.Printf("\n输出: %s\n报告: %s\n", abs, filepath.Join(abs, sum.Report))
+	fmt.Printf("\n输出: %s\n", abs)
+	if sum.Report != "" {
+		fmt.Printf("报告: %s\n", filepath.Join(abs, filepath.FromSlash(sum.Report)))
+	}
 	for _, p := range sum.PDFs {
 		fmt.Println("PDF :", filepath.Join(abs, filepath.FromSlash(p)))
 	}
