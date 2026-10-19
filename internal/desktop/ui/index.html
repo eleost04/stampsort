@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stampsort 水印照片整理</title>
+<link rel="icon" href="/assets/icon.png">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="i-add" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="15.5" cy="9.5" r="1.6"/><path d="m3.5 17 5-5.2 4 4.2 2.2-2.2 5.8 5.7"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.6l2 2.2h7.4A2.5 2.5 0 0 1 21 9.7v7.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><path d="M6.5 3h7.3L19 8.2v11.3a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M13.5 3v5.5H19M10 5h1.5M10 8h1.5M10 11h1.5M10 14h1.5v3H10z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17.2v.3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M10 4h4M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></symbol>
+  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6.5 3h7.3L19 8.2v11.3a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3z"/><path d="M13.5 3v5.5H19M8.5 13h7M8.5 16.5h5"/></symbol>
+  <symbol id="i-bug" viewBox="0 0 24 24"><rect x="7.5" y="8" width="9" height="12" rx="4.5"/><path d="M9.5 8.3a2.5 2.5 0 0 1 5 0M12 12v8M4 13h3.5M16.5 13H20M5 8.5l2.8 2M19 8.5l-2.8 2M5 19l2.8-2M19 19l-2.8-2"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9.5 6 6 6-6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7 4.5 11.5 9 16"/><path d="M5 11.5h9.5a5 5 0 0 1 0 10H11"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 64 64"><rect x="9" y="15" width="38" height="30" rx="5" fill="currentColor" fill-opacity=".08"/><rect x="17" y="9" width="38" height="30" rx="5" fill="var(--surface)"/><circle cx="44" cy="19" r="3.5"/><path d="m18 36 9-9.5 7 7.5 4-4 9 9"/><path d="M32 46v12M26.5 52.5 32 58l5.5-5.5"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="top">
+    <img class="logo" src="/assets/icon.png" alt="">
+    <div class="brand"><b>stampsort</b><span>水印照片整理 · 6 寸打印</span></div>
+    <div class="grow"></div>
+    <button id="ocrWarn" class="pill warn hidden" title="点击查看原因"><svg class="ic"><use href="#i-warn"/></svg>水印识别不可用</button>
+    <button class="icon-btn" id="diagBtn" title="拖放诊断：从微信拖入没反应时看这里"><svg class="ic"><use href="#i-bug"/></svg></button>
+    <button class="icon-btn" id="setBtn" title="设置"><svg class="ic"><use href="#i-gear"/></svg></button>
+  </header>
+  <div class="banner hidden" id="updBanner">
+    <svg class="ic"><use href="#i-sparkle"/></svg>
+    <span id="updText"></span>
+    <div class="bar small hidden" id="updBarWrap"><div id="updBar"></div></div>
+    <div class="grow"></div>
+    <button class="btn small" id="updNotes">更新说明</button>
+    <button class="btn small primary" id="updGo">立即更新</button>
+    <button class="icon-btn small" id="updClose" title="稍后"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+
+  <main class="body">
+    <section class="workspace">
+      <div class="toolbar" id="toolbar">
+        <div class="menu-wrap">
+          <button class="btn primary" id="addBtn"><svg class="ic"><use href="#i-add"/></svg>添加<svg class="ic sm"><use href="#i-down"/></svg></button>
+          <div class="menu hidden" id="addMenu" role="menu">
+            <button data-pick="files"><svg class="ic"><use href="#i-image"/></svg>照片…<kbd>Ctrl+O</kbd></button>
+            <button data-pick="folder"><svg class="ic"><use href="#i-folder"/></svg>文件夹…</button>
+            <button data-pick="zip"><svg class="ic"><use href="#i-zip"/></svg>压缩包…</button>
+          </div>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="grow"></div>
+        <div class="seg small" id="filter">
+          <label><input type="radio" name="filter" value="all" checked>全部</label>
+          <label><input type="radio" name="filter" value="check">待核对<span class="badge hidden" id="checkCount"></span></label>
+        </div>
+        <button class="btn subtle" id="clearBtn" title="清空列表（不会删除原图）"><svg class="ic"><use href="#i-trash"/></svg>清空</button>
+      </div>
+
+      <div class="scroll" id="scroll">
+        <div class="empty" id="empty">
+          <div class="drop-card" id="dropCard">
+            <svg class="drop-art"><use href="#i-drop"/></svg>
+            <h2>把照片拖到这里</h2>
+            <p>支持从<b>微信</b>、资源管理器直接拖入，也可以 <kbd>Ctrl</kbd>+<kbd>V</kbd> 粘贴<br>文件夹、zip 压缩包都可以</p>
+            <div class="row">
+              <button class="btn primary" data-pick="files"><svg class="ic"><use href="#i-image"/></svg>添加照片…</button>
+              <button class="btn" data-pick="folder"><svg class="ic"><use href="#i-folder"/></svg>添加文件夹…</button>
+              <button class="btn" data-pick="zip"><svg class="ic"><use href="#i-zip"/></svg>添加压缩包…</button>
+            </div>
+          </div>
+          <ol class="steps">
+            <li><b>1</b><span>加入照片<br><small>自动识别左下角水印时间</small></span></li>
+            <li><b>2</b><span>核对时间<br><small>没认出来的点开填写</small></span></li>
+            <li><b>3</b><span>导出<br><small>按 年/月/日 分类 + 6 寸打印 PDF</small></span></li>
+          </ol>
+        </div>
+        <div id="groups"></div>
+        <div class="filter-empty hidden" id="filterEmpty"><svg class="ic xl"><use href="#i-check"/></svg>没有需要核对的照片</div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <h3>导出设置</h3>
+      <div class="field">
+        <label>处理内容</label>
+        <div class="seg" id="mode">
+          <label><input type="radio" name="mode" value="all">分类 + 6 寸</label>
+          <label><input type="radio" name="mode" value="sort">只分类</label>
+          <label><input type="radio" name="mode" value="print">只 6 寸</label>
+        </div>
+      </div>
+      <div class="field" data-for-print>
+        <label>6 寸排版</label>
+        <div class="seg" id="layout">
+          <label><input type="radio" name="layout" value="c">方案 C</label>
+          <label><input type="radio" name="layout" value="crop">纯裁切</label>
+        </div>
+        <p class="hint" id="layoutHint"></p>
+      </div>
+      <div class="field" data-for-print>
+        <label class="switch"><input type="checkbox" data-bool="pdf"><span class="track"></span>合成 PDF<small>每个日期文件夹一份，每页 6×4 英寸</small></label>
+      </div>
+      <div class="field">
+        <label>保存到</label>
+        <div class="path">
+          <span id="outDir" title=""></span>
+          <button class="btn small" data-outdir>更改…</button>
+          <button class="icon-btn small" id="outOpen" title="打开文件夹"><svg class="ic"><use href="#i-open"/></svg></button>
+        </div>
+      </div>
+      <div class="field">
+        <label>按什么分文件夹</label>
+        <select class="select" data-str="dirFormat">
+          <option value="ymd">年 / 月 / 日</option>
+          <option value="ym">年 / 月</option>
+          <option value="md">月 / 日</option>
+          <option value="d">日（保存位置已是某个月的文件夹）</option>
+          <option value="flat">年-月-日（一层）</option>
+        </select>
+        <div class="example" id="example"></div>
+      </div>
+      <div class="grow"></div>
+      <p class="summary" id="summary"></p>
+      <button class="btn primary big" id="exportBtn" disabled>导出</button>
+    </aside>
+  </main>
+
+  <div class="dropmask hidden" id="dropmask"><div><svg class="drop-art"><use href="#i-drop"/></svg><b>松开即可加入</b><span>照片、文件夹、zip 都可以</span></div></div>
+  <div class="toasts" id="toasts"></div>
+</div>
+
+<dialog id="viewer" class="viewer">
+  <div class="v-head">
+    <div class="v-title"><b id="vName"></b><span id="vPos"></span></div>
+    <div class="seg small" id="vKind">
+      <label><input type="radio" name="vkind" value="orig" checked>原图</label>
+      <label><input type="radio" name="vkind" value="print">6 寸效果</label>
+    </div>
+    <button class="icon-btn" data-close title="关闭 (Esc)"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+  <div class="v-stage">
+    <button class="nav prev" id="vPrev" title="上一张 (←)"><svg class="ic"><use href="#i-left"/></svg></button>
+    <div class="v-img" id="vImgWrap"><img id="vImg" alt=""><div class="spinner" id="vSpin"></div><span class="paper-tag hidden" id="vPaper">6×4 英寸 · 打印效果</span></div>
+    <button class="nav next" id="vNext" title="下一张 (→)"><svg class="ic"><use href="#i-right"/></svg></button>
+  </div>
+  <form class="v-foot" id="vForm">
+    <div class="v-src" id="vSrc"></div>
+    <label class="v-time">拍摄时间
+      <input type="date" id="vDate" required>
+      <input type="time" id="vClock">
+    </label>
+    <button type="button" class="btn subtle" id="vReset" title="恢复为自动识别的结果"><svg class="ic"><use href="#i-undo"/></svg>恢复识别结果</button>
+    <button type="button" class="btn subtle" id="vRedetect" title="重新识别这张照片的水印时间"><svg class="ic"><use href="#i-undo"/></svg>重新识别</button>
+    <div class="grow"></div>
+    <button type="submit" class="btn primary">保存，下一张<kbd>Enter</kbd></button>
+  </form>
+</dialog>
+
+<dialog id="exportDlg" class="modal">
+  <div id="expRunning">
+    <h2>正在导出…</h2>
+    <div class="bar"><div id="expBar"></div></div>
+    <p class="muted" id="expText"></p>
+    <div class="actions"><button class="btn" id="expCancel">取消</button></div>
+  </div>
+  <div id="expDone" class="hidden">
+    <div class="done-icon" id="expIcon"><svg class="ic"><use href="#i-check"/></svg></div>
+    <h2 id="expTitle">导出完成</h2>
+    <div class="chips" id="expChips"></div>
+    <p class="muted path-line" id="expPath"></p>
+    <div class="pdf-list" id="expPdfs"></div>
+    <div class="actions">
+      <button class="btn primary" id="expOpen"><svg class="ic"><use href="#i-folder"/></svg>打开文件夹</button>
+      <button class="btn" id="expClear">清空，开始新一批</button>
+      <button class="btn subtle" data-close>继续</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="confirmDlg" class="modal small">
+  <h2 id="cfTitle"></h2>
+  <p id="cfText"></p>
+  <div class="actions">
+    <button class="btn primary" id="cfOk"></button>
+    <button class="btn" id="cfCancel"></button>
+  </div>
+</dialog>
+
+<dialog id="setDlg" class="modal wide settings">
+  <h2>设置</h2>
+  <div class="set-body">
+    <section>
+      <h3>导出</h3>
+      <div class="set-row"><span>保存位置</span><div class="path"><span id="outDir2"></span><button class="btn small" data-outdir>更改…</button></div></div>
+      <div class="set-row"><span>导出方式</span>
+        <div class="seg" id="newFolder">
+          <label><input type="radio" name="newFolder" value="0">直接导出到保存位置</label>
+          <label><input type="radio" name="newFolder" value="1">每次新建「日期 时间 导出」</label>
+        </div></div>
+      <div class="set-row"><span>分文件夹</span>
+        <select class="select" data-str="dirFormat">
+          <option value="ymd">年 / 月 / 日　　2026/10/19</option>
+          <option value="ym">年 / 月　　　　2026/10</option>
+          <option value="md">月 / 日　　　　10/19</option>
+          <option value="d">日　　　　　　19</option>
+          <option value="flat">年-月-日一层　2026-10-19</option>
+        </select></div>
+      <div class="set-row"><span>文件名</span>
+        <select class="select" data-str="nameFormat">
+          <option value="datetime">日期_时间　　2026-10-19_08-21</option>
+          <option value="time">只要时间　　08-21</option>
+          <option value="orig">保留原文件名</option>
+        </select></div>
+      <div class="set-row"><span></span><label class="switch"><input type="checkbox" data-inv="printFlat"><span class="track"></span>只做 6 寸时也按日期分文件夹</label></div>
+      <div class="example big" id="example2"></div>
+    </section>
+    <section>
+      <h3>6 寸打印</h3>
+      <div class="set-row"><span>分辨率</span>
+        <select class="select" data-num="dpi"><option value="300">300 dpi（推荐）</option><option value="200">200 dpi（文件小）</option><option value="400">400 dpi</option></select></div>
+      <div class="set-row"><span>图片质量</span>
+        <select class="select" data-num="quality"><option value="95">高（95）</option><option value="90">较高（90）</option><option value="85">中（85，文件小）</option><option value="100">最高（100）</option></select></div>
+      <div class="set-row"><span></span><label class="switch"><input type="checkbox" id="bleed"><span class="track"></span>额外生成出血版 2.5%<small>无边距打印时防止啃掉边缘</small></label></div>
+    </section>
+    <section>
+      <h3>识别</h3>
+      <div class="set-row"><span>同时识别</span><select class="select" data-num="workers" id="workersSel"></select></div>
+      <div class="set-row"><span>水印位置</span><div class="inline"><span id="hintState"></span><button class="btn small" id="hintReset">重新学习</button></div></div>
+      <p class="hint">认出第一张后会记住水印在画面里的位置，后面的照片直接按位置读，换背景也不影响。换了水印相机 App 时点「重新学习」。</p>
+    </section>
+    <section>
+      <h3>更新</h3>
+      <div class="set-row"><span>当前版本</span><div class="inline"><b id="verText"></b><button class="btn small" id="updCheck">检查更新</button><span class="muted" id="updCheckText"></span></div></div>
+      <div class="set-row"><span></span><label class="switch"><input type="checkbox" data-inv="noAutoUpdate"><span class="track"></span>启动时自动检查更新</label></div>
+      <div class="set-row"><span>更新来源</span>
+        <select class="select" data-str="updateSource"><option value="auto">自动（网盘优先，GitHub 备用）</option><option value="openlist">网盘</option><option value="github">GitHub</option></select></div>
+    </section>
+    <section>
+      <h3>其它</h3>
+      <div class="set-row"><span></span><div class="inline"><button class="btn small" id="openLogs">打开日志文件夹</button><button class="btn small" id="diagBtn2">拖放诊断</button></div></div>
+    </section>
+  </div>
+  <div class="actions"><button class="btn primary" data-close>完成</button></div>
+</dialog>
+
+<dialog id="ocrDlg" class="modal">
+  <h2>水印识别不可用</h2>
+  <p>现在只能用照片信息（EXIF）和文件名里的日期，微信传过来的照片大多会显示"未识别"。</p>
+  <p class="muted">原因：<code id="ocrErr"></code></p>
+  <p>最常见的原因是电脑上缺少微软 <b>VC++ 运行库</b>（水印识别引擎依赖它）。安装后重新打开本程序即可；另外请确认 <code>onnxruntime.dll</code> 和 <code>stampsort.exe</code> 在同一个文件夹里。</p>
+  <div class="actions">
+    <button class="btn primary" id="ocrFix">下载 VC++ 运行库</button>
+    <button class="btn" data-close>关闭</button>
+  </div>
+</dialog>
+
+<dialog id="diagDlg" class="modal wide">
+  <h2>拖放诊断</h2>
+  <p class="muted">从微信或其它程序拖入/粘贴后没有加入照片时，把下面的记录复制发给开发者，就能知道对方程序给了什么格式的数据。日志文件也会记录：<code id="logPath"></code></p>
+  <pre id="diagText">还没有拖放记录。先试着从微信拖一张图片进来。</pre>
+  <div class="actions">
+    <button class="btn primary" id="diagCopy">复制</button>
+    <button class="btn" data-close>关闭</button>
+  </div>
+</dialog>
+
+<input type="file" id="fileInput" multiple accept="image/jpeg,image/png,.zip" hidden>
+<input type="file" id="dirInput" webkitdirectory hidden>
+<script src="/assets/app.js"></script>
+</body>
+</html>

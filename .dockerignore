@@ -1,0 +1,7 @@
+.git
+lib
+models/*.onnx
+data
+dist
+.env
+*.exe

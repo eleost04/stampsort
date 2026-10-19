@@ -1,0 +1,43 @@
+name: build
+
+# 只做测试和构建检查。正式发版（安装包签名、更新清单）在发布机上用 make installer / make manifest 完成，
+# 签名私钥不放进 CI。
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test ort
+      - name: OCR 冒烟测试（合成图）
+        run: STAMPSORT_ORT_LIB=$PWD/lib/libonnxruntime.so go test ./internal/stamp/ -run OCR -v
+
+  windows:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64 cabextract nsis
+      - run: make installer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stampsort-windows
+          path: |
+            dist/stampsort-setup-*.exe
+            dist/stampsort-windows-amd64.zip

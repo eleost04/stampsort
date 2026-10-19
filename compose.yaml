@@ -1,0 +1,25 @@
+# 一键部署：./deploy.sh（生成随机密码写入 .env，再 docker compose up -d --build）
+services:
+  stampsort:
+    build: .
+    image: stampsort:latest
+    container_name: stampsort
+    environment:
+      STAMPSORT_PASSWORD: ${STAMPSORT_PASSWORD:?run ./deploy.sh or set STAMPSORT_PASSWORD}
+      STAMPSORT_MAX_UPLOAD_MB: ${STAMPSORT_MAX_UPLOAD_MB:-1024}
+      TZ: ${TZ:-Asia/Shanghai}
+    restart: unless-stopped
+    init: true
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${STAMPSORT_MEM_LIMIT:-512m}
+    volumes:
+      - ${STAMPSORT_DATA_DIR:-./data}:/data
+    ports:
+      - "${STAMPSORT_BIND:-127.0.0.1}:${STAMPSORT_PORT:-8930}:8930"

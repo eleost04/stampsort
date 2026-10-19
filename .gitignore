@@ -1,0 +1,12 @@
+# 构建时下载的外部文件（make model / make ort）
+models/*.onnx
+lib/
+dist/
+# 部署
+.env
+data/
+# 产物
+/stampsort
+*.exe
+*.syso
+release.env
