@@ -755,7 +755,6 @@ function openDiag() {
   $("diagText").textContent = diags.length ? JSON.stringify(diags.slice().reverse(), null, 2) : "还没有拖放记录。先试着从微信拖一张图片进来，或者 Ctrl+V 粘贴。";
   $("diagDlg").showModal();
 }
-$("diagBtn").onclick = openDiag;
 $("diagBtn2").onclick = openDiag;
 $("setBtn").onclick = () => { renderSettings(state.settings); $("setDlg").showModal(); };
 $("openLogs").onclick = () => api("/api/open-logs", { method: "POST" }).catch((e) => toast(e.message, "err"));
@@ -769,11 +768,16 @@ $("updCheck").onclick = async () => {
   try {
     const u = await api("/api/update/check", { method: "POST" });
     $("updCheckText").textContent = u.error ? `检查失败：${u.error}` : u.available ? `发现新版本 ${u.latest}` : `已是最新版本`;
-    refresh();
+    await refresh();
   } catch (e) { $("updCheckText").textContent = e.message; }
 };
 
 function renderUpdate(u) {
+  // 设置页里的更新状态：有新版时直接给「立即更新」，下载中显示进度
+  show($("updGo2"), u.available && !u.downloading && !u.installing);
+  if (u.downloading) $("updCheckText").textContent = `正在下载 ${u.latest}… ${u.size ? Math.round((u.done / u.size) * 100) : 0}%`;
+  else if (u.installing) $("updCheckText").textContent = "正在安装，程序会自动重新打开…";
+  else if (u.available && !$("updCheckText").textContent) $("updCheckText").textContent = `发现新版本 ${u.latest}`;
   const show_ = (u.available && !u.dismissed) || u.downloading || u.installing;
   show($("updBanner"), show_);
   if (!show_) return;
@@ -794,6 +798,7 @@ $("updGo").onclick = async () => {
   try { await api("/api/update/install", { method: "POST" }); refresh(); }
   catch (e) { toast(e.message, "err"); }
 };
+$("updGo2").onclick = () => $("updGo").onclick();
 $("updClose").onclick = () => api("/api/update/dismiss", { method: "POST" }).then(refresh);
 $("updNotes").onclick = () => confirmDlg(`新版本 ${state.update.latest}`, state.update.notes || "", "立即更新", "稍后").then((ok) => ok && $("updGo").onclick());
 $("ocrWarn").onclick = () => { $("ocrErr").textContent = state.ocrError || "未知"; $("ocrDlg").showModal(); };

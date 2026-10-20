@@ -35,7 +35,6 @@
     <div class="brand"><b>stampsort</b><span>水印照片整理 · 6 寸打印</span></div>
     <div class="grow"></div>
     <button id="ocrWarn" class="pill warn hidden" title="点击查看原因"><svg class="ic"><use href="#i-warn"/></svg>水印识别不可用</button>
-    <button class="icon-btn" id="diagBtn" title="拖放诊断：从微信拖入没反应时看这里"><svg class="ic"><use href="#i-bug"/></svg></button>
     <button class="icon-btn" id="setBtn" title="设置"><svg class="ic"><use href="#i-gear"/></svg></button>
   </header>
   <div class="banner hidden" id="updBanner">
@@ -199,7 +198,7 @@
 </dialog>
 
 <dialog id="setDlg" class="modal wide settings">
-  <h2>设置</h2>
+  <div class="dlg-head"><h2>设置</h2><button class="icon-btn " data-close title="关闭 (Esc)"><svg class="ic"><use href="#i-close"/></svg></button></div>
   <div class="set-body">
     <section>
       <h3>导出</h3>
@@ -244,20 +243,22 @@
     </section>
     <section>
       <h3>更新</h3>
-      <div class="set-row"><span>当前版本</span><div class="inline"><b id="verText"></b><button class="btn small" id="updCheck">检查更新</button><span class="muted" id="updCheckText"></span></div></div>
+      <div class="set-row"><span>当前版本</span><div class="inline"><b id="verText"></b><button class="btn small" id="updCheck">检查更新</button><span class="muted" id="updCheckText"></span><button class="btn small primary hidden" id="updGo2">立即更新</button></div></div>
       <div class="set-row"><span></span><label class="switch"><input type="checkbox" data-inv="noAutoUpdate"><span class="track"></span>启动时自动检查更新</label></div>
       <div class="set-row"><span>更新来源</span>
         <select class="select" data-str="updateSource"><option value="auto">自动（网盘优先，GitHub 备用）</option><option value="openlist">网盘</option><option value="github">GitHub</option></select></div>
     </section>
     <section>
       <h3>其它</h3>
-      <div class="set-row"><span></span><div class="inline"><button class="btn small" id="openLogs">打开日志文件夹</button><button class="btn small" id="diagBtn2">拖放诊断</button></div></div>
+      <div class="set-row"><span>排查问题</span><div class="inline"><button class="btn small" id="openLogs">打开日志文件夹</button><button class="btn small" id="diagBtn2">拖放诊断</button></div></div>
+      <p class="hint">从微信拖进来没反应时，点「拖放诊断」，把里面的记录发给开发者。</p>
     </section>
   </div>
-  <div class="actions"><button class="btn primary" data-close>完成</button></div>
+  <div class="dlg-foot"><button class="btn primary" data-close>完成</button></div>
 </dialog>
 
 <dialog id="ocrDlg" class="modal">
+  <button class="icon-btn dlg-x" data-close title="关闭 (Esc)"><svg class="ic"><use href="#i-close"/></svg></button>
   <h2>水印识别不可用</h2>
   <p>现在只能用照片信息（EXIF）和文件名里的日期，微信传过来的照片大多会显示"未识别"。</p>
   <p class="muted">原因：<code id="ocrErr"></code></p>
@@ -269,6 +270,7 @@
 </dialog>
 
 <dialog id="diagDlg" class="modal wide">
+  <button class="icon-btn dlg-x" data-close title="关闭 (Esc)"><svg class="ic"><use href="#i-close"/></svg></button>
   <h2>拖放诊断</h2>
   <p class="muted">从微信或其它程序拖入/粘贴后没有加入照片时，把下面的记录复制发给开发者，就能知道对方程序给了什么格式的数据。日志文件也会记录：<code id="logPath"></code></p>
   <pre id="diagText">还没有拖放记录。先试着从微信拖一张图片进来。</pre>
