@@ -20,6 +20,7 @@ import (
 	"github.com/eleost04/stampsort/internal/desktop"
 	"github.com/eleost04/stampsort/internal/input"
 	"github.com/eleost04/stampsort/internal/job"
+	"github.com/eleost04/stampsort/internal/organize"
 	"github.com/eleost04/stampsort/internal/print6"
 	"github.com/eleost04/stampsort/internal/stamp"
 	"github.com/eleost04/stampsort/internal/web"
@@ -193,6 +194,9 @@ func runBatch(cmd string, args []string) error {
 	workers := fs.Int("j", 0, "并行数（默认 CPU 核数）")
 	noMark := fs.Bool("no-mark", false, "不把拍摄时间写进导出的照片（默认写入 EXIF 拍摄日期 + stampsort 标记）")
 	noReport := fs.Bool("no-report", false, "不写 report.csv")
+	sortTpl := fs.String("sort-dir", "", `原图目录模板，如 "{年}/{月份}月/原图/{日}"（默认 分类/{年}/{月}/{日}，只分类时 {年}/{月}/{日}）`)
+	printTpl := fs.String("print-dir", "", `6 寸目录模板，如 "{年}/{月份}月/6寸/{日}"`)
+	pdfTpl := fs.String("pdf-dir", "", `「待打印」PDF 目录模板，如 "待打印"（默认和当天的 6 寸放一起）`)
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "用法: stampsort %s 照片/目录/zip... [参数]\n\n", cmd)
 		fs.PrintDefaults()
@@ -217,6 +221,15 @@ func runBatch(cmd string, args []string) error {
 		Layout: print6.Options{Mode: print6.Mode(*mode), DPI: *dpi, CropRatio: *cropRatio, CropTop: *cropTop},
 		PDF:    *pdf, Bleed: *bleed, Chunk: *chunk, Quality: *quality, NoJPG: *noJPG, Workers: *workers,
 		Mark: !*noMark, NoReport: *noReport,
+		SortTemplate: *sortTpl, PrintTemplate: *printTpl, PDFTemplate: *pdfTpl,
+	}
+	for name, t := range map[string]string{"--sort-dir": *sortTpl, "--print-dir": *printTpl, "--pdf-dir": *pdfTpl} {
+		if err := organize.ValidTemplate(t); err != nil {
+			return fmt.Errorf("%s：%v", name, err)
+		}
+	}
+	if *printTpl != "" && cmd == "print" {
+		o.PrintByDate = true
 	}
 	if o.NoJPG {
 		o.PDF = true

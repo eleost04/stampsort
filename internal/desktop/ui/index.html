@@ -120,13 +120,13 @@
         </div>
       </div>
       <div class="field">
-        <label>按什么分文件夹</label>
-        <select class="select" data-str="dirFormat">
-          <option value="ymd">年 / 月 / 日</option>
-          <option value="ym">年 / 月</option>
-          <option value="md">月 / 日</option>
-          <option value="d">日（保存位置已是某个月的文件夹）</option>
-          <option value="flat">年-月-日（一层）</option>
+        <label>导出结构</label>
+        <select class="select" id="presetSel">
+          <option value="ymd">分类 / 年 / 月 / 日</option>
+          <option value="ym">分类 / 年 / 月</option>
+          <option value="ymcd">年 / 月 / 类别 / 日</option>
+          <option value="flat">分类 / 年-月-日</option>
+          <option value="custom">自定义…</option>
         </select>
         <div class="example" id="example"></div>
       </div>
@@ -208,14 +208,17 @@
           <label><input type="radio" name="newFolder" value="0">直接导出到保存位置</label>
           <label><input type="radio" name="newFolder" value="1">每次新建「日期 时间 导出」</label>
         </div></div>
-      <div class="set-row"><span>分文件夹</span>
-        <select class="select" data-str="dirFormat">
-          <option value="ymd">年 / 月 / 日　　2026/10/19</option>
-          <option value="ym">年 / 月　　　　2026/10</option>
-          <option value="md">月 / 日　　　　10/19</option>
-          <option value="d">日　　　　　　19</option>
-          <option value="flat">年-月-日一层　2026-10-19</option>
-        </select></div>
+      <div class="set-row"><span>快速套用</span>
+        <div class="inline">
+          <button class="btn small" data-preset="ymd">分类/年/月/日</button>
+          <button class="btn small" data-preset="ym">分类/年/月</button>
+          <button class="btn small" data-preset="ymcd">年/月/类别/日</button>
+          <button class="btn small" data-preset="flat">分类/年-月-日</button>
+        </div></div>
+      <div class="set-row"><span>原图放在</span><input class="input tpl" data-tpl="sortTemplate" spellcheck="false"></div>
+      <div class="set-row"><span>6 寸放在</span><input class="input tpl" data-tpl="printTemplate" spellcheck="false"></div>
+      <div class="set-row"><span>待打印 PDF</span><input class="input tpl" data-tpl="pdfTemplate" spellcheck="false"></div>
+      <div class="set-row"><span></span><p class="hint tpl-help">都是相对「保存位置」的文件夹。可以用 <code>{年}</code> 2026、<code>{月}</code> 08、<code>{月份}</code> 8、<code>{日}</code> 09、<code>{日期}</code> 2026-08-09，其它文字原样保留，<code>\</code> 分隔文件夹。<br>例：<code>{年}\{月份}月\原图\{日}</code> → <code>2026\8月\原图\09</code>。没识别出时间的照片放进其中固定的文件夹下的「未识别」。<span class="tpl-err" id="tplErr"></span></p></div>
       <div class="set-row"><span>文件名</span>
         <select class="select" data-str="nameFormat">
           <option value="datetime">日期_时间　　2026-10-19_08-21</option>

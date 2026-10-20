@@ -182,7 +182,7 @@ func TestDayFolderAndPDFMerge(t *testing.T) {
 		}
 		return items
 	}
-	o := Options{Sort: true, Print: true, PDF: true, OutDir: out, Layout: print6.DefaultOptions(), DirFormat: "d", NameFormat: "time"}
+	o := Options{Sort: true, Print: true, PDF: true, OutDir: out, Layout: print6.DefaultOptions(), SortTemplate: "分类/{日}", PrintTemplate: "6寸/{日}", NameFormat: "time"}
 	o.Layout.DPI = 50
 	if _, err := Run(context.Background(), mk("IMG_20261019_082100.jpg", "IMG_20261020_090000.jpg"), nil, o, nil); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestPrintByDate(t *testing.T) {
 	src := t.TempDir()
 	items := []input.Item{{Path: writePhoto(t, src, "IMG_20261019_082100.jpg", 400, 300), Name: "IMG_20261019_082100.jpg"}}
 	out := t.TempDir()
-	o := Options{Print: true, PrintByDate: true, OutDir: out, Layout: print6.DefaultOptions(), DirFormat: "md"}
+	o := Options{Print: true, PrintByDate: true, OutDir: out, Layout: print6.DefaultOptions(), PrintTemplate: "{月}/{日}"}
 	o.Layout.DPI = 50
 	sum, err := Run(context.Background(), items, nil, o, nil)
 	if err != nil {
@@ -284,5 +284,46 @@ func TestMoveInPlaceKeepsFile(t *testing.T) {
 		if _, err := os.Stat(target); err != nil {
 			t.Fatalf("mark=%v: 源文件（也是目标文件）被删了", mark)
 		}
+	}
+}
+
+// 常见结构：保存位置下 {年}/{月}月/原图/{日} 和 {年}/{月}月/打印/{日}，PDF 统一放「待打印」，文件名带日期；
+// 跨月的一批也能自动分开；第二次导出同一天，PDF 合并两次的照片；未识别的放进固定部分下的「未识别」。
+func TestTemplatesAndDatedPDF(t *testing.T) {
+	out := t.TempDir()
+	mk := func(names ...string) []input.Item {
+		src := t.TempDir()
+		var items []input.Item
+		for i, n := range names {
+			items = append(items, input.Item{Path: writePhoto(t, src, n, 400+i, 300), Name: n})
+		}
+		return items
+	}
+	o := Options{Sort: true, Print: true, PDF: true, Mark: true, NoReport: true, OutDir: out, Layout: print6.DefaultOptions(),
+		SortTemplate: `{年}\{月}月\原图\{日}`, PrintTemplate: "{年}/{月}月/打印/{日}", PDFTemplate: "待打印"}
+	o.Layout.DPI = 50
+	if _, err := Run(context.Background(), mk("IMG_20261019_082100.jpg", "IMG_20261101_090000.jpg", "DSC0001.jpg"), nil, o, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(context.Background(), mk("IMG_20261019_142400.jpg"), nil, o, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"2026/10月/原图/19/2026-10-19_08-21.jpg", "2026/10月/原图/19/2026-10-19_14-24.jpg",
+		"2026/11月/原图/01/2026-11-01_09-00.jpg", "原图/未识别/DSC0001.jpg", "打印/未识别/DSC0001_6寸.jpg",
+		"2026/10月/打印/19/2026-10-19_08-21_6寸.jpg",
+		"待打印/待打印_2026-10-19_横版.pdf", "待打印/待打印_2026-11-01_横版.pdf", "待打印/待打印_未识别_横版.pdf",
+	} {
+		if _, err := os.Stat(filepath.Join(out, filepath.FromSlash(want))); err != nil {
+			t.Errorf("缺少 %s", want)
+		}
+	}
+	pdf, _ := os.ReadFile(filepath.Join(out, "待打印", "待打印_2026-10-19_横版.pdf"))
+	if !strings.Contains(string(pdf), "/Count 2") {
+		t.Error("19 日的 PDF 应合并两次导出的 2 张")
+	}
+	pdf, _ = os.ReadFile(filepath.Join(out, "待打印", "待打印_2026-11-01_横版.pdf"))
+	if !strings.Contains(string(pdf), "/Count 1") {
+		t.Error("11 月 1 日的 PDF 应只有 1 张")
 	}
 }

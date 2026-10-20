@@ -9,14 +9,9 @@ import (
 	"github.com/eleost04/stampsort/internal/stamp"
 )
 
-func TestStemAndDir(t *testing.T) {
+func TestStem(t *testing.T) {
 	tm := time.Date(2026, 8, 13, 6, 20, 13, 0, time.Local)
 	r := stamp.Result{Time: tm, HasClock: true, Source: stamp.FromOCR}
-	for f, want := range map[string]string{"": "2026/08/13", DirYMD: "2026/08/13", DirYM: "2026/08", DirMD: "08/13", DirD: "13", DirFlat: "2026-08-13"} {
-		if got := DateDir(r, f); got != want {
-			t.Errorf("DateDir(%q) = %s，期望 %s", f, got, want)
-		}
-	}
 	for f, want := range map[string]string{"": "2026-08-13_06-20", NameDateTime: "2026-08-13_06-20", NameTime: "06-20", NameOrig: "IMG_1"} {
 		if got := Stem(r, "a.zip/IMG_1.JPG", f); got != want {
 			t.Errorf("Stem(%q) = %s，期望 %s", f, got, want)
@@ -26,12 +21,8 @@ func TestStemAndDir(t *testing.T) {
 	if Stem(r, "x.jpg", NameTime) != "2026-08-13" {
 		t.Error("只有日期时不能用时间命名")
 	}
-	none := stamp.Result{Source: stamp.None}
-	if DateDir(none, DirD) != Unknown || Stem(none, "a.zip/工地/IMG_1.JPG", NameTime) != "IMG_1" {
-		t.Error(Stem(none, "a.zip/工地/IMG_1.JPG", NameTime))
-	}
-	if DirHasMonth(DirD) || !DirHasMonth(DirMD) || DirHasYear(DirMD) || !DirHasYear(DirFlat) {
-		t.Error("DirHasMonth/DirHasYear")
+	if Stem(stamp.Result{Source: stamp.None}, "a.zip/工地/IMG_1.JPG", NameTime) != "IMG_1" {
+		t.Error("未识别应保留原名")
 	}
 }
 

@@ -658,7 +658,8 @@ func (s *Server) startExport(w http.ResponseWriter, r *http.Request) {
 	lo.DPI = st.DPI
 	o := job.Options{Sort: st.Mode != "print", Print: st.Mode != "sort", OutDir: out, Layout: lo,
 		PDF: st.PDF, Bleed: st.Bleed, Quality: st.Quality, Preset: presets, Workers: Workers(st.Workers),
-		DirFormat: st.DirFormat, NameFormat: st.NameFormat, PrintByDate: !st.PrintFlat, ReportName: report,
+		SortTemplate: st.SortTemplate, PrintTemplate: st.PrintTemplate, PDFTemplate: st.PDFTemplate,
+		NameFormat: st.NameFormat, PrintByDate: !st.PrintFlat, ReportName: report,
 		NoReport: !st.Report, Mark: !st.NoMark}
 	ctx, cancel := context.WithCancel(context.Background())
 	exp := &exportState{Running: true, Total: len(items), OutDir: out, Skipped: skipped, cancel: cancel}

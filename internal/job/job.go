@@ -2,11 +2,13 @@
 package job
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"fmt"
 	"image"
 	"image/jpeg"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,14 +29,15 @@ import (
 
 // 输出目录名。
 const (
-	DirSorted = "分类"
-	DirPrint  = "6寸"
-	Report    = "report.csv"
+	Report = "report.csv"
 )
 
-// Options 决定做哪些事。Sort 和 Print 都为 true 时：OUT/分类/<层级> + OUT/6寸/<层级>（每个目录一组 PDF）。
-// 只 Sort：OUT/<层级>。只 Print：OUT/<原名>_6寸.jpg（与旧脚本一致），PrintByDate 时 OUT/<层级>/。
-// <层级> 由 DirFormat 决定（默认 年/月/日），文件名由 NameFormat 决定。
+// Options 决定做哪些事。目录由模板决定（见 organize.Render），模板为空时用默认：
+//   - 分类 + 6 寸：OUT/分类/年/月/日 + OUT/6寸/年/月/日（每个目录一组 PDF）
+//   - 只分类：OUT/年/月/日
+//   - 只 6 寸：OUT/<原名>_6寸.jpg（与旧脚本一致）；PrintByDate 时按 6 寸模板分目录
+//
+// 文件名由 NameFormat 决定。
 type Options struct {
 	Sort, Print bool
 	Move        bool // 分类时移动原图而不是复制
@@ -48,8 +51,13 @@ type Options struct {
 	Workers     int
 	// Preset 与 items 按下标对应：有值时直接用这个时间，不再识别（桌面版核对后导出用）。
 	Preset []*stamp.Result
-	// DirFormat / NameFormat 见 organize.Dir* / organize.Name*，空字符串为默认。
-	DirFormat, NameFormat string
+	// SortTemplate / PrintTemplate：原图、6 寸放在哪个目录（模板，空 = 默认）。
+	SortTemplate, PrintTemplate string
+	// PDFTemplate：「待打印」PDF 放在哪个目录。为空时和当天的 6 寸放在一起、文件名不带日期（命令行的老做法）；
+	// 设置后按日期分组，文件名为 待打印_2026-10-19_横版.pdf。
+	PDFTemplate string
+	// NameFormat 见 organize.Name*，空为默认。
+	NameFormat string
 	// PrintByDate：只做 6 寸时也按日期分目录、按时间命名（需要识别时间）。
 	PrintByDate bool
 	// ReportName 是报告的相对路径，默认 report.csv；NoReport 时不写报告。
@@ -94,13 +102,23 @@ type runner struct {
 	turn    *turnstile
 	tmpDir  string
 
-	mu    sync.Mutex
-	pages map[pdfKey][]print6.PDFPage
+	sortT, printT string // 生效的模板（已代入默认值）
+
+	mu     sync.Mutex
+	groups map[pdfGroup]*pdfPages
 }
 
-type pdfKey struct {
-	dir      string
-	portrait bool
+// pdfGroup 是一份（或几份分卷的）「待打印」PDF。date 为空表示按 6 寸目录分组的老做法。
+type pdfGroup struct {
+	dir  string
+	date string
+}
+
+type pdfPages struct {
+	pages    []print6.PDFPage
+	srcDirs  map[string]bool // 这一组的 6 寸照片所在目录（合并以前导出的照片时扫描）
+	thisRun  map[string]bool
+	printDay bool // 6 寸模板是否每天一个目录（是的话目录里没有标记的照片也算同一天）
 }
 
 // Run 处理 items。det 可为 nil（只排版不识别时）。ctx 取消后尽快停止，已完成的结果仍会写报告。
@@ -124,9 +142,10 @@ func Run(ctx context.Context, items []input.Item, det *stamp.Detector, o Options
 	if err := os.MkdirAll(o.OutDir, 0o755); err != nil {
 		return nil, err
 	}
-	r := &runner{o: o, det: det, turn: newTurnstile(), pages: map[pdfKey][]print6.PDFPage{}}
-	r.sorted = organize.NewNamer(filepath.Join(o.OutDir, r.sortedRoot()))
-	r.printed = organize.NewNamer(filepath.Join(o.OutDir, r.printRoot()))
+	r := &runner{o: o, det: det, turn: newTurnstile(), groups: map[pdfGroup]*pdfPages{}}
+	r.sortT, r.printT = o.templates()
+	r.sorted = organize.NewNamer(o.OutDir)
+	r.printed = organize.NewNamer(o.OutDir)
 	if o.Print && (o.NoJPG || o.PDF) {
 		tmp, err := os.MkdirTemp(o.OutDir, ".tmp-")
 		if err != nil {
@@ -193,18 +212,23 @@ feed:
 	return sum, ctx.Err()
 }
 
-func (r *runner) sortedRoot() string {
-	if r.o.Sort && r.o.Print {
-		return DirSorted
+// templates 返回生效的原图、6 寸目录模板（空的用默认值）。
+func (o Options) templates() (sortT, printT string) {
+	sortT, printT = o.SortTemplate, o.PrintTemplate
+	both := o.Sort && o.Print
+	if sortT == "" {
+		sortT = "{年}/{月}/{日}"
+		if both {
+			sortT = organize.DefaultSortTemplate
+		}
 	}
-	return ""
-}
-
-func (r *runner) printRoot() string {
-	if r.o.Sort && r.o.Print {
-		return DirPrint
+	if printT == "" {
+		printT = "{年}/{月}/{日}"
+		if both {
+			printT = organize.DefaultPrintTemplate
+		}
 	}
-	return ""
+	return sortT, printT
 }
 
 // one 处理一张图。命名在 turnstile 里按输入顺序进行，保证 _2、_3 的编号稳定。
@@ -269,16 +293,16 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 		ext = ".jpg"
 	}
 	if r.o.Sort {
-		dir, stem := organize.DateDir(res.Stamp, r.o.DirFormat), organize.Stem(res.Stamp, it.Name, r.o.NameFormat)
+		dir, stem := organize.Render(r.sortT, res.Stamp), organize.Stem(res.Stamp, it.Name, r.o.NameFormat)
 		same := func(p string) bool { return organize.SameFile(it.Path, p) }
 		if marked != nil {
 			same = func(p string) bool { return organize.SameContent(marked, p) || isSamePath(it.Path, p) }
 		}
 		sortedRel, res.Existed = r.sorted.Reserve(dir, stem, ext, same)
-		printDir = dir
+		printDir = organize.Render(r.printT, res.Stamp)
 		printStem = strings.TrimSuffix(path.Base(sortedRel), path.Ext(sortedRel))
 	} else if r.o.PrintByDate {
-		printDir = organize.DateDir(res.Stamp, r.o.DirFormat)
+		printDir = organize.Render(r.printT, res.Stamp)
 		printStem = organize.Stem(res.Stamp, it.Name, r.o.NameFormat)
 	} else {
 		base := path.Base(filepath.ToSlash(it.Name))
@@ -293,7 +317,7 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 	named = true
 
 	if r.o.Sort {
-		res.Sorted = path.Join(r.sortedRoot(), sortedRel)
+		res.Sorted = sortedRel
 		if !res.Existed {
 			dst := filepath.Join(r.o.OutDir, filepath.FromSlash(res.Sorted))
 			var err error
@@ -323,8 +347,6 @@ func (r *runner) one(ctx context.Context, i int, it input.Item) (res Result) {
 	}
 	return
 }
-
-var rePrintPDF = regexp.MustCompile(`^待打印_(横|竖)版(_\d+)?\.pdf$`)
 
 // isSamePath 判断两个路径是否指向同一个文件（考虑大小写、相对路径、链接）。
 func isSamePath(a, b string) bool {
@@ -369,7 +391,7 @@ func (r *runner) print(img *image.RGBA, gray []uint8, res *Result, dir, rel stri
 	}
 	var jpgPath string
 	if rel != "" {
-		res.Print = path.Join(r.printRoot(), rel)
+		res.Print = rel
 		jpgPath = filepath.Join(r.o.OutDir, filepath.FromSlash(res.Print))
 		if err := os.MkdirAll(filepath.Dir(jpgPath), 0o755); err != nil {
 			return err
@@ -391,103 +413,158 @@ func (r *runner) print(img *image.RGBA, gray []uint8, res *Result, dir, rel stri
 				return err
 			}
 		}
-		k := pdfKey{dir, info.Portrait}
+		g := pdfGroup{dir: dir}
+		if r.o.PDFTemplate != "" {
+			pdfDir := organize.Render(r.o.PDFTemplate, res.Stamp)
+			if res.Stamp.Source == stamp.None { // 文件名里已经有"未识别"，不用再套一层未识别文件夹
+				pdfDir = organize.FixedPart(r.o.PDFTemplate)
+			}
+			g = pdfGroup{dir: pdfDir, date: dateLabel(res.Stamp)}
+		}
 		r.mu.Lock()
-		r.pages[k] = append(r.pages[k], print6.PDFPage{JPEG: jpgPath, W: out.Rect.Dx(), H: out.Rect.Dy()})
+		pg := r.groups[g]
+		if pg == nil {
+			pg = &pdfPages{srcDirs: map[string]bool{}, thisRun: map[string]bool{}, printDay: organize.TemplateHasDay(r.printT)}
+			r.groups[g] = pg
+		}
+		pg.pages = append(pg.pages, print6.PDFPage{JPEG: jpgPath, W: out.Rect.Dx(), H: out.Rect.Dy()})
+		pg.srcDirs[dir] = true
+		pg.thisRun[jpgPath] = true
 		r.mu.Unlock()
 	}
 	return nil
 }
 
-// writePDFs 按目录 + 横竖分组，每组按文件名排序，每 Chunk 页一个 PDF。
+// dateLabel 是 PDF 文件名里的日期。
+func dateLabel(r stamp.Result) string {
+	if r.Source == stamp.None || r.Source == "" {
+		return organize.Unknown
+	}
+	return r.Time.Format("2006-01-02")
+}
+
+// writePDFs 按组写「待打印」PDF：横版、竖版分开，按文件名排序，每 Chunk 页一个文件。
 //
-// 单张 6 寸 JPEG 存在时，PDF 收录该目录下全部 *_6寸.jpg（包括以前导出到同一目录的），
-// 这样多次导出到同一个文件夹，每天的"待打印"PDF 始终是完整的。
+// 单张 6 寸 JPEG 存在时，PDF 收录这一组对应目录下的全部 6 寸照片（包括以前导出到同一目录的），
+// 这样多次导出到同一个文件夹，每天的 PDF 始终是完整的。
 func (r *runner) writePDFs() ([]string, error) {
-	if !r.o.NoJPG {
-		if err := r.collectDirPages(); err != nil {
-			return nil, err
-		}
+	groups := make([]pdfGroup, 0, len(r.groups))
+	for g := range r.groups {
+		groups = append(groups, g)
 	}
-	keys := make([]pdfKey, 0, len(r.pages))
-	for k := range r.pages {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].dir != keys[j].dir {
-			return keys[i].dir < keys[j].dir
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i].dir != groups[j].dir {
+			return groups[i].dir < groups[j].dir
 		}
-		return !keys[i].portrait
+		return groups[i].date < groups[j].date
 	})
 	var out []string
-	for _, k := range keys {
-		pages := r.pages[k]
-		sort.Slice(pages, func(i, j int) bool { return input.NaturalLess(pages[i].JPEG, pages[j].JPEG) })
-		tag := "横版"
-		if k.portrait {
-			tag = "竖版"
+	for _, g := range groups {
+		pg := r.groups[g]
+		pages := pg.pages
+		if !r.o.NoJPG {
+			pages = r.dirPages(g, pg)
 		}
-		for i := 0; i < len(pages); i += r.o.Chunk {
-			part := pages[i:min(i+r.o.Chunk, len(pages))]
-			name := "待打印_" + tag
-			if len(pages) > r.o.Chunk {
-				name += fmt.Sprintf("_%d", i/r.o.Chunk+1)
+		abs := filepath.Join(r.o.OutDir, filepath.FromSlash(g.dir))
+		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return out, err
+		}
+		removeOldPDFs(abs, g.date)
+		for _, portrait := range []bool{false, true} {
+			var part []print6.PDFPage
+			for _, p := range pages {
+				if (p.H > p.W) == portrait {
+					part = append(part, p)
+				}
 			}
-			rel := path.Join(r.printRoot(), k.dir, name+".pdf")
-			abs := filepath.Join(r.o.OutDir, filepath.FromSlash(rel))
-			if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-				return out, err
+			sort.Slice(part, func(i, j int) bool { return input.NaturalLess(part[i].JPEG, part[j].JPEG) })
+			tag := "横版"
+			if portrait {
+				tag = "竖版"
 			}
-			if err := print6.WritePDF(abs, part, r.o.Layout.DPI); err != nil {
-				return out, err
+			base := "待打印_" + tag
+			if g.date != "" {
+				base = "待打印_" + g.date + "_" + tag
 			}
-			out = append(out, rel)
+			for i := 0; i < len(part); i += r.o.Chunk {
+				chunk := part[i:min(i+r.o.Chunk, len(part))]
+				name := base
+				if len(part) > r.o.Chunk {
+					name += fmt.Sprintf("_%d", i/r.o.Chunk+1)
+				}
+				rel := path.Join(g.dir, name+".pdf")
+				if err := print6.WritePDF(filepath.Join(r.o.OutDir, filepath.FromSlash(rel)), chunk, r.o.Layout.DPI); err != nil {
+					return out, err
+				}
+				out = append(out, rel)
+			}
 		}
 	}
 	return out, nil
 }
 
-// collectDirPages 用目录里现有的全部 6 寸成品替换本次的页面列表，并删掉旧 PDF（分卷数可能变了）。
-func (r *runner) collectDirPages() error {
-	dirs := map[string]bool{}
-	for k := range r.pages {
-		dirs[k.dir] = true
+var rePrintPDF = regexp.MustCompile(`^待打印_(?:(\d{4}-\d{2}-\d{2}|未识别)_)?(横|竖)版(_\d+)?\.pdf$`)
+
+// removeOldPDFs 删掉本程序以前为这一组生成的 PDF（分卷数可能变了）。只删名字完全符合的。
+func removeOldPDFs(dir, date string) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if m := rePrintPDF.FindStringSubmatch(e.Name()); m != nil && m[1] == date {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
 	}
-	pages := map[pdfKey][]print6.PDFPage{}
-	for dir := range dirs {
-		abs := filepath.Join(r.o.OutDir, filepath.FromSlash(path.Join(r.printRoot(), dir)))
+}
+
+// dirPages 收集这一组对应 6 寸目录里的全部成品。按日期分组时只收同一天的：
+// 照片里有时间标记就按标记判断；没有标记时，6 寸目录本身按天分的才算。
+func (r *runner) dirPages(g pdfGroup, pg *pdfPages) []print6.PDFPage {
+	var pages []print6.PDFPage
+	seen := map[string]bool{}
+	for dir := range pg.srcDirs {
+		abs := filepath.Join(r.o.OutDir, filepath.FromSlash(dir))
 		entries, err := os.ReadDir(abs)
 		if err != nil {
-			return err
+			continue
 		}
 		for _, e := range entries {
 			name := e.Name()
-			if e.IsDir() {
-				continue
-			}
-			if rePrintPDF.MatchString(name) { // 只删本程序生成的（待打印_横版.pdf、待打印_竖版_2.pdf 这种）
-				os.Remove(filepath.Join(abs, name))
-				continue
-			}
-			if !strings.HasSuffix(name, input.SkipSuffix+".jpg") { // 跳过出血版和其它文件
+			if e.IsDir() || !strings.HasSuffix(name, input.SkipSuffix+".jpg") { // 跳过出血版和其它文件
 				continue
 			}
 			p := filepath.Join(abs, name)
-			f, err := os.Open(p)
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			head := readHead(p, 128<<10)
+			cfg, err := jpeg.DecodeConfig(bytes.NewReader(head))
 			if err != nil {
 				continue
 			}
-			cfg, err := jpeg.DecodeConfig(f)
-			f.Close()
-			if err != nil {
-				continue
+			if g.date != "" && !pg.thisRun[p] {
+				if m := photo.ParseExif(head).Mark; m != nil {
+					if m.Time.Format("2006-01-02") != g.date {
+						continue
+					}
+				} else if !pg.printDay {
+					continue
+				}
 			}
-			k := pdfKey{dir, cfg.Height > cfg.Width}
-			pages[k] = append(pages[k], print6.PDFPage{JPEG: p, W: cfg.Width, H: cfg.Height})
+			pages = append(pages, print6.PDFPage{JPEG: p, W: cfg.Width, H: cfg.Height})
 		}
 	}
-	r.pages = pages
-	return nil
+	return pages
+}
+
+func readHead(p string, n int) []byte {
+	f, err := os.Open(p)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	buf := make([]byte, n)
+	k, _ := io.ReadFull(f, buf)
+	return buf[:k]
 }
 
 // writeReport 写 UTF-8 BOM 的 CSV，Excel 直接打开不乱码。

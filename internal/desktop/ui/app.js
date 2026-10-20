@@ -209,6 +209,10 @@ function renderSettings(s) {
   $("layoutHint").textContent = s.layout === "crop"
     ? "完全不变形，只从顶部裁到 3:2，不会裁到水印。"
     : "顶部少裁一点，水印不变形，主体轻微竖向压缩（约 7%）。";
+  $("presetSel").value = presetOf(s);
+  document.querySelectorAll("[data-tpl]").forEach((el) => {
+    if (el !== document.activeElement) { el.value = (s[el.dataset.tpl] || "").replace(/\//g, state.platform === "windows" ? "\\" : "/"); el.classList.remove("bad"); }
+  });
   const ex = examplePaths(s);
   $("example").innerHTML = ex;
   $("example2").innerHTML = ex;
@@ -223,6 +227,27 @@ function renderSettings(s) {
   $("verText").textContent = state.version || "";
 }
 
+// 导出结构预设（只放通用的；具体文件夹名由用户在设置里自己填）
+const PRESETS = {
+  ymd: ["分类/{年}/{月}/{日}", "6寸/{年}/{月}/{日}"],
+  ym: ["分类/{年}/{月}", "6寸/{年}/{月}"],
+  ymcd: ["{年}/{月份}月/原图/{日}", "{年}/{月份}月/6寸/{日}"],
+  flat: ["分类/{日期}", "6寸/{日期}"],
+};
+const norm = (t) => (t || "").replace(/\\/g, "/").split("/").map((x) => x.trim()).filter(Boolean).join("/");
+function presetOf(s) {
+  for (const [k, [a, b]] of Object.entries(PRESETS)) if (norm(s.sortTemplate) === a && norm(s.printTemplate) === b) return k;
+  return "custom";
+}
+// renderTpl 和 Go 端 organize.Render 一致
+function renderTpl(t, d) {
+  const segs = norm(t).split("/").filter(Boolean);
+  if (!d) return [...segs.filter((x) => !x.includes("{")), "未识别"];
+  const [y, m, day] = d.split("-");
+  return segs.map((x) => x.replaceAll("{日期}", d).replaceAll("{年}", y).replaceAll("{月份}", String(Number(m))).replaceAll("{月}", m).replaceAll("{日}", day));
+}
+const splits = (t) => ({ year: /\{年\}|\{日期\}/.test(t), month: /\{月\}|\{月份\}|\{日期\}/.test(t) });
+
 // 路径示例：用第一张已识别的照片（没有就用示例时间）演示导出后放在哪里
 const PAD = (n) => String(n).padStart(2, "0");
 function examplePaths(s) {
@@ -230,15 +255,17 @@ function examplePaths(s) {
   const [d, t] = (it ? it.time : "2026-10-19 08:21").split(" ");
   const [y, m, day] = d.split("-");
   const sep = state.platform === "windows" ? "\\" : "/";
-  const dirs = { ymd: [y, m, day], ym: [y, m], md: [m, day], d: [day], flat: [d] }[s.dirFormat] || [y, m, day];
   const name = { datetime: `${d}_${t.replace(":", "-")}`, time: t.replace(":", "-"), orig: it ? it.name.split("/").pop().replace(/\.[^.]+$/, "") : "IMG_0001" }[s.nameFormat];
   let root = (s.outDir || "").replace(/[\\/]+$/, "");
   if (s.newFolder) root += sep + "2026-10-19 103000 导出";
   const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-  const line = (sub, dd, file) => `${esc(root)}${sub ? sep + "<b>" + sub + "</b>" : ""}${dd.length ? sep + "<b>" + dd.join(sep) + "</b>" : ""}${sep}${esc(file)}`;
+  const line = (dirs, file) => `${esc(root)}${dirs.length ? sep + "<b>" + esc(dirs.join(sep)) + "</b>" : ""}${sep}${esc(file)}`;
   const lines = [];
-  if (s.mode !== "print") lines.push(line(s.mode === "all" ? "分类" : "", dirs, name + ".jpg"));
-  if (s.mode !== "sort") lines.push(line(s.mode === "all" ? "6寸" : "", s.mode === "print" && s.printFlat ? [] : dirs, name + "_6寸.jpg"));
+  if (s.mode !== "print") lines.push(line(renderTpl(s.sortTemplate, d), name + ".jpg"));
+  if (s.mode !== "sort") {
+    lines.push(line(s.mode === "print" && s.printFlat ? [] : renderTpl(s.printTemplate, d), name + "_6寸.jpg"));
+    if (s.pdf) lines.push(line(norm(s.pdfTemplate) ? renderTpl(s.pdfTemplate, d) : [], `待打印_${d}_横版.pdf`));
+  }
   return "导出后：<br>" + lines.join("<br>");
 }
 
@@ -529,6 +556,39 @@ document.querySelectorAll("[data-num]").forEach((el) => el.addEventListener("cha
 document.querySelectorAll("[data-bool]").forEach((el) => el.addEventListener("change", () => saveSettings({ [el.dataset.bool]: el.checked })));
 document.querySelectorAll("[data-inv]").forEach((el) => el.addEventListener("change", () => saveSettings({ [el.dataset.inv]: !el.checked })));
 $("bleed").onchange = () => saveSettings({ bleed: $("bleed").checked ? 2.5 : 0 });
+const applyPreset = (k) => PRESETS[k] && saveSettings({ sortTemplate: PRESETS[k][0], printTemplate: PRESETS[k][1] });
+$("presetSel").onchange = () => {
+  const k = $("presetSel").value;
+  if (k === "custom") { renderSettings(state.settings); $("setDlg").showModal(); $("setDlg").querySelector("[data-tpl]").focus(); return; }
+  applyPreset(k);
+};
+document.querySelectorAll("[data-preset]").forEach((b) => (b.onclick = () => applyPreset(b.dataset.preset)));
+// 模板输入框：停止输入 0.6 秒后保存，写错了就地提示。每个框各自计时，
+// 否则很快改完一个框再改另一个时，前一个框的保存会被取消。
+const tplTimers = {};
+async function saveTpl(el) {
+  clearTimeout(tplTimers[el.dataset.tpl]);
+  if (norm(el.value) === norm(state.settings[el.dataset.tpl]) && !el.classList.contains("bad")) return;
+  try {
+    state.settings = await api("/api/settings", { method: "PUT", json: { [el.dataset.tpl]: el.value } });
+    el.classList.remove("bad");
+    $("tplErr").textContent = "";
+    const ex = examplePaths(state.settings);
+    $("example").innerHTML = ex;
+    $("example2").innerHTML = ex;
+    $("presetSel").value = presetOf(state.settings);
+  } catch (e) {
+    el.classList.add("bad");
+    $("tplErr").textContent = e.message;
+  }
+}
+document.querySelectorAll("[data-tpl]").forEach((el) => {
+  el.addEventListener("input", () => {
+    clearTimeout(tplTimers[el.dataset.tpl]);
+    tplTimers[el.dataset.tpl] = setTimeout(() => saveTpl(el), 600);
+  });
+  el.addEventListener("change", () => saveTpl(el)); // 离开输入框（或关闭设置）时立即保存
+});
 document.querySelectorAll("[data-outdir]").forEach((b) => (b.onclick = () => pick("outdir")));
 $("outOpen").onclick = () => api("/api/open", { json: { path: state.settings.outDir } }).catch((e) => toast(e.message, "err"));
 
@@ -683,12 +743,14 @@ $("exportBtn").onclick = async () => {
     const months = [...new Set(ready.map((it) => it.time.slice(0, 7)))].sort();
     const years = [...new Set(months.map((m) => m.slice(0, 4)))];
     const label = (m) => `${Number(m.slice(0, 4))}年${Number(m.slice(5, 7))}月`;
-    if (s.dirFormat === "d" && months.length > 1) {
-      const fix = await confirmDlg("照片跨了好几个月", `这批照片包含 ${months.map(label).join("、")}。按「日」分文件夹会把不同月份同一天的照片放进同一个文件夹。`, years.length > 1 ? "改成 年/月/日" : "改成 月/日", "仍然导出");
-      if (fix) await saveSettings({ dirFormat: years.length > 1 ? "ymd" : "md" });
-    } else if (s.dirFormat === "md" && years.length > 1) {
-      const fix = await confirmDlg("照片跨了年份", `这批照片包含 ${years.join("、")} 年。按「月/日」分会把不同年份同一天的照片放到一起。`, "改成 年/月/日", "仍然导出");
-      if (fix) await saveSettings({ dirFormat: "ymd" });
+    const tpls = [s.mode !== "print" && s.sortTemplate, s.mode !== "sort" && !(s.mode === "print" && s.printFlat) && s.printTemplate].filter(Boolean);
+    const noMonth = tpls.some((t) => !splits(t).month), noYear = tpls.some((t) => !splits(t).year);
+    let msg = "";
+    if (noMonth && months.length > 1) msg = `这批照片包含 ${months.map(label).join("、")}。现在的导出结构不分月份，不同月份同一天的照片会放进同一个文件夹。`;
+    else if (noYear && years.length > 1) msg = `这批照片包含 ${years.join("、")} 年。现在的导出结构不分年份，不同年份的照片会放到一起。`;
+    if (msg && await confirmDlg("照片跨了月份或年份", msg, "去改导出结构", "仍然导出")) {
+      renderSettings(state.settings);
+      return $("setDlg").showModal();
     }
   }
   try {

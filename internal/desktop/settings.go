@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,12 +24,16 @@ type Settings struct {
 	OutDir string  `json:"outDir"`
 
 	// 导出
-	NewFolder  bool   `json:"newFolder"`  // true：每次新建「日期 时间 导出」文件夹；false：直接导出到 OutDir
-	DirFormat  string `json:"dirFormat"`  // 分类层级，见 organize.Dir*
-	NameFormat string `json:"nameFormat"` // 文件名，见 organize.Name*
-	PrintFlat  bool   `json:"printFlat"`  // 只做 6 寸时不按日期分目录
-	NoMark     bool   `json:"noMark"`     // 不把拍摄时间写进导出的照片
-	Report     bool   `json:"report"`     // 保存导出记录（CSV），默认不保存
+	NewFolder bool `json:"newFolder"` // true：每次新建「日期 时间 导出」文件夹；false：直接导出到 OutDir
+	// 目录模板（见 organize.Render）：原图、6 寸、「待打印」PDF 各放哪里。空 = 默认。
+	SortTemplate  string `json:"sortTemplate"`
+	PrintTemplate string `json:"printTemplate"`
+	PDFTemplate   string `json:"pdfTemplate"`
+	DirFormat     string `json:"dirFormat,omitempty"` // 旧版的"按什么分文件夹"，读取时转换成模板
+	NameFormat    string `json:"nameFormat"`          // 文件名，见 organize.Name*
+	PrintFlat     bool   `json:"printFlat"`           // 只做 6 寸时不按日期分目录
+	NoMark        bool   `json:"noMark"`              // 不把拍摄时间写进导出的照片
+	Report        bool   `json:"report"`              // 保存导出记录（CSV），默认不保存
 
 	// 6 寸
 	DPI     int `json:"dpi"`     // 0 = 300
@@ -48,7 +53,8 @@ type Settings struct {
 
 func defaultSettings() Settings {
 	return Settings{Mode: "all", Layout: "c", PDF: true, OutDir: filepath.Join(picturesDir(), "stampsort"),
-		DirFormat: organize.DirYMD, NameFormat: organize.NameDateTime, DPI: 300, Quality: 95, UpdateSource: "auto"}
+		SortTemplate: organize.DefaultSortTemplate, PrintTemplate: organize.DefaultPrintTemplate, PDFTemplate: organize.DefaultPDFTemplate,
+		NameFormat: organize.NameDateTime, DPI: 300, Quality: 95, UpdateSource: "auto"}
 }
 
 type settingsStore struct {
@@ -89,9 +95,21 @@ func (s Settings) sanitize() Settings {
 	if s.OutDir == "" {
 		s.OutDir = d.OutDir
 	}
-	if !organize.ValidDirFormat(s.DirFormat) {
-		s.DirFormat = d.DirFormat
+	if s.SortTemplate == "" && s.PrintTemplate == "" { // 旧设置：按原来选的层级换成模板
+		if st, pt, ok := organize.LegacyTemplates(s.DirFormat); ok {
+			s.SortTemplate, s.PrintTemplate = st, pt
+		}
 	}
+	s.DirFormat = ""
+	fix := func(t *string, def string) {
+		*t = organize.CleanTemplate(*t)
+		if *t == "" || organize.ValidTemplate(*t) != nil {
+			*t = def
+		}
+	}
+	fix(&s.SortTemplate, d.SortTemplate)
+	fix(&s.PrintTemplate, d.PrintTemplate)
+	fix(&s.PDFTemplate, d.PDFTemplate)
 	if !organize.ValidNameFormat(s.NameFormat) {
 		s.NameFormat = d.NameFormat
 	}
@@ -125,6 +143,11 @@ func (st *settingsStore) update(patch []byte) (Settings, error) {
 		return st.cur, err
 	}
 	next.Hints, next.LastCheck = st.cur.Hints, st.cur.LastCheck
+	for name, t := range map[string]string{"原图": next.SortTemplate, "6 寸": next.PrintTemplate, "待打印 PDF": next.PDFTemplate} {
+		if err := organize.ValidTemplate(t); err != nil { // 模板写错了直接告诉用户，不要悄悄改回默认
+			return st.cur, fmt.Errorf("%s的文件夹模板：%v", name, err)
+		}
+	}
 	st.cur = next.sanitize()
 	st.saveLocked()
 	return st.cur, nil

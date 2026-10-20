@@ -17,15 +17,6 @@ import (
 // Unknown 是识别不出时间的照片所在目录。
 const Unknown = "未识别"
 
-// 分类目录的层级格式。
-const (
-	DirYMD  = "ymd"  // 2026/10/19（默认）
-	DirYM   = "ym"   // 2026/10
-	DirMD   = "md"   // 10/19
-	DirD    = "d"    // 19：适合导出到"资料/10/"这种已经按月建好的文件夹
-	DirFlat = "flat" // 2026-10-19 一层
-)
-
 // 文件名格式。
 const (
 	NameDateTime = "datetime" // 2026-10-19_08-21（默认）
@@ -33,29 +24,8 @@ const (
 	NameOrig     = "orig"     // 保留原文件名
 )
 
-var dirLayouts = map[string]string{DirYMD: "2006/01/02", DirYM: "2006/01", DirMD: "01/02", DirD: "02", DirFlat: "2006-01-02"}
-
-// ValidDirFormat / ValidNameFormat 校验设置值。
-func ValidDirFormat(f string) bool  { _, ok := dirLayouts[f]; return ok }
+// ValidNameFormat 校验文件名设置。
 func ValidNameFormat(f string) bool { return f == NameDateTime || f == NameTime || f == NameOrig }
-
-// DirHasMonth 表示该层级是否区分月份（不区分时跨月的照片会混在一起）。
-func DirHasMonth(f string) bool { return f != DirD }
-
-// DirHasYear 表示该层级是否区分年份。
-func DirHasYear(f string) bool { return f != DirD && f != DirMD }
-
-// DateDir 返回分类目录（如 "2026/10/19"），识别失败返回 "未识别"。format 为空时用年/月/日。
-func DateDir(r stamp.Result, format string) string {
-	if r.Source == stamp.None || r.Source == "" {
-		return Unknown
-	}
-	layout, ok := dirLayouts[format]
-	if !ok {
-		layout = dirLayouts[DirYMD]
-	}
-	return r.Time.Format(layout)
-}
 
 // Stem 返回不带扩展名的新文件名。识别失败时总是保留原名。
 func Stem(r stamp.Result, origName, format string) string {

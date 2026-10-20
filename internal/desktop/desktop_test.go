@@ -228,7 +228,7 @@ func TestAddReviewExport(t *testing.T) {
 		"分类/2026/08/13/2026-08-13_06-20.jpg",
 		"分类/2026/08/14/2026-08-14_09-00.jpg",
 		"分类/2025/01/02/2025-01-02_03-04.jpg",
-		"6寸/2026/08/15/待打印_横版.pdf",
+		"待打印/待打印_2026-08-15_横版.pdf",
 	} {
 		if _, err := os.Stat(filepath.Join(x.OutDir, filepath.FromSlash(want))); err != nil {
 			t.Errorf("缺少 %s", want)
@@ -295,16 +295,25 @@ func TestSettingsMigration(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "settings.json")
 	os.WriteFile(p, []byte(`{"mode":"all","layout":"c","pdf":true,"bleed":0,"outDir":"D:\\照片"}`), 0o644)
 	got := loadSettings(p).get()
-	if got.DirFormat != "ymd" || got.NameFormat != "datetime" || got.DPI != 300 || got.Quality != 95 ||
+	if got.SortTemplate != "分类/{年}/{月}/{日}" || got.PDFTemplate != "待打印" || got.NameFormat != "datetime" || got.DPI != 300 || got.Quality != 95 ||
 		got.NoAutoUpdate || got.NewFolder || got.PrintFlat || got.UpdateSource != "auto" || got.OutDir != `D:\照片` {
 		t.Errorf("%+v", got)
 	}
 	// 界面不能改 hints / lastCheck
 	st := loadSettings(p)
 	st.setHint(false, stamp.Hint{X0: 0, Y0: 0.8, X1: 0.5, Y1: 0.85})
-	st.update([]byte(`{"hints":null,"dirFormat":"d","workers":99}`))
-	if g := st.get(); len(g.Hints) != 1 || g.DirFormat != "d" || g.Workers != 0 {
+	st.update([]byte(`{"hints":null,"workers":99}`))
+	if g := st.get(); len(g.Hints) != 1 || g.Workers != 0 {
 		t.Errorf("%+v", g)
+	}
+	// 旧版选了"日"：换成 分类/{日}、6寸/{日}
+	os.WriteFile(p, []byte(`{"dirFormat":"d"}`), 0o644)
+	if g := loadSettings(p).get(); g.SortTemplate != "分类/{日}" || g.PrintTemplate != "6寸/{日}" || g.DirFormat != "" {
+		t.Errorf("旧设置没转换: %+v", g)
+	}
+	// 模板写错要报错，不悄悄改回默认
+	if _, err := st.update([]byte(`{"sortTemplate":"../{年}"}`)); err == nil {
+		t.Error("非法模板应报错")
 	}
 }
 
@@ -312,7 +321,7 @@ func TestSettingsMigration(t *testing.T) {
 func TestExportByDay(t *testing.T) {
 	e := newEnv(t)
 	root := filepath.Join(t.TempDir(), "资料", "10")
-	data, _ := json.Marshal(map[string]any{"outDir": root, "dirFormat": "d", "nameFormat": "time"})
+	data, _ := json.Marshal(map[string]any{"outDir": root, "sortTemplate": "分类/{日}", "printTemplate": "6寸/{日}", "pdfTemplate": "6寸/{日}", "nameFormat": "time"})
 	req, _ := http.NewRequest("PUT", e.ts.URL+"/api/settings", bytes.NewReader(data))
 	if r, _ := e.c.Do(req); r.StatusCode != 200 {
 		t.Fatal("保存设置失败")
@@ -327,7 +336,7 @@ func TestExportByDay(t *testing.T) {
 	if st.Export.OutDir != root {
 		t.Errorf("应直接导出到保存位置，得到 %s", st.Export.OutDir)
 	}
-	for _, want := range []string{"分类/19/08-21.jpg", "分类/20/14-24.jpg", "6寸/19/08-21_6寸.jpg", "6寸/19/待打印_横版.pdf"} {
+	for _, want := range []string{"分类/19/08-21.jpg", "分类/20/14-24.jpg", "6寸/19/08-21_6寸.jpg", "6寸/19/待打印_2026-10-19_横版.pdf"} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(want))); err != nil {
 			t.Errorf("缺少 %s", want)
 		}
